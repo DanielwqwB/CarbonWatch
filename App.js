@@ -1,121 +1,170 @@
 import React from 'react';
-import { Text, View, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import './css/css'
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  StatusBar,
+  Dimensions,
+  Platform,
+} from 'react-native';
+// Standard imports for Expo Go
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Icons from 'lucide-react-native';
 
-// Import your styles
-import styles from './EnviAnalyticsStyles'; 
+const { width, height } = Dimensions.get('window');
+const CENTER_COORD = { latitude: 14.5544, longitude: 121.0463 };
 
-const EnviAnalyticsScreen = () => {
+const heatPoints = [
+  { latitude: 14.5544, longitude: 121.0463, weight: 1.0 },
+  { latitude: 14.555, longitude: 121.047, weight: 0.9 },
+  { latitude: 14.552, longitude: 121.042, weight: 0.5 },
+];
+
+const MapScreen = () => {
+  // Safe Icon Helper to prevent 'undefined' errors
+  const SafeIcon = ({ name, size = 24, color = "#000", ...props }) => {
+    const IconComponent = Icons[name];
+    if (!IconComponent) return <View style={{ width: size, height: size, backgroundColor: '#ccc' }} />;
+    return <IconComponent size={size} color={color} {...props} />;
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>ENVI Analytics</Text>
-        <TouchableOpacity style={styles.settingsButton}>
-          <Ionicons name="settings-sharp" size={20} color="#555" />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* --- MAP SECTION --- */}
+      <MapView
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={{
+          ...CENTER_COORD,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.015,
+        }}
+      >
+        {/* Heatmap check */}
+        {MapView.Heatmap ? (
+          <MapView.Heatmap
+            points={heatPoints}
+            radius={50}
+            opacity={0.7}
+            gradient={{
+              colors: ['#64dc64', '#ffdc00', '#f03232'],
+              startPoints: [0.1, 0.4, 1.0],
+              colorMapSize: 256,
+            }}
+          />
+        ) : null}
+
+        <Marker coordinate={CENTER_COORD}>
+          <View style={styles.calloutContainer}>
+            <View style={styles.calloutBubble}>
+              <Text style={styles.calloutTitle}>Barangay Centro</Text>
+              <View style={styles.calloutTempRow}>
+                <SafeIcon name="AlertTriangle" size={32} color="#FF6B6B" fill="#FF6B6B" />
+                <Text style={styles.calloutTempText}>39.2°C</Text>
+                <View style={styles.fingerprintIcon}>
+                  <SafeIcon name="Fingerprint" size={24} color="#E58E6D" opacity={0.7} />
+                </View>
+              </View>
+              <View style={styles.calloutDataRow}>
+                <SafeIcon name="Leaf" size={16} color="#6CAE75" fill="#6CAE75" />
+                <Text style={styles.calloutDataText}> Carbon Density: </Text>
+                <Text style={[styles.calloutDataText, styles.redText]}>High</Text>
+              </View>
+            </View>
+            <View style={styles.calloutArrow} />
+            <View style={styles.markerBase}>
+                <SafeIcon name="AlertTriangle" size={40} color="#D64545" fill="#E85D5D" />
+            </View>
+          </View>
+        </Marker>
+      </MapView>
+
+      {/* --- OVERLAY UI --- */}
+      <View style={styles.overlayContainer} pointerEvents="box-none">
+        <View style={styles.topHeaderBar}>
+          <View style={styles.weatherWidget}>
+            <SafeIcon name="CloudSun" size={24} color="#FDB813" />
+            <Text style={styles.weatherText}> 33°C Cloudy</Text>
+          </View>
+          <View style={styles.topIconsContainer}>
+            <TouchableOpacity style={styles.iconButton}><SafeIcon name="Search" color="#666" /></TouchableOpacity>
+            <TouchableOpacity style={[styles.iconButton, styles.locateButton]}><SafeIcon name="Crosshair" color="#555" /></TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.bottomFloatingPanel}>
+          <TouchableOpacity style={styles.heatAirButton}>
+            <Text style={styles.heatAirButtonText}>Heat and Air Quality</Text>
+            <SafeIcon name="ChevronRight" size={20} color="white" />
+          </TouchableOpacity>
+          <View style={styles.carbonStatusPanel}>
+            <View style={styles.carbonStatusLeft}>
+              <SafeIcon name="Leaf" size={20} color="#6CAE75" fill="#6CAE75" />
+              <Text style={styles.carbonStatusText}> Carbon Density</Text>
+            </View>
+            <View style={styles.carbonStatusRight}>
+              <SafeIcon name="User" size={20} color="#5F9EA0" fill="#A0CED9" />
+              <Text style={[styles.carbonStatusText, { fontWeight: 'bold' }]}> High</Text>
+            </View>
+          </View>
+        </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Date Dropdown */}
-        <TouchableOpacity style={styles.dateSelector}>
-          <Text style={styles.dateText}>January 2026</Text>
-          <Ionicons name="chevron-down" size={20} color="#333" />
-        </TouchableOpacity>
-
-        {/* 2x2 Stats Grid */}
-        <View style={styles.gridContainer}>
-          <View style={styles.statCard}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FFEBEE' }]}>
-              <MaterialCommunityIcons name="thermometer" size={24} color="#EF5350" />
-            </View>
-            <Text style={styles.statValue}>670</Text>
-            <Text style={styles.statLabel}>Heat Stress Cases</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FFF3E0' }]}>
-              <MaterialCommunityIcons name="cloud-outline" size={24} color="#FFB74D" />
-            </View>
-            <Text style={styles.statValue}>120</Text>
-            <Text style={styles.statLabel}>Emission Tons (Top 20%)</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <View style={[styles.iconCircle, { backgroundColor: '#E3F2FD' }]}>
-              <MaterialCommunityIcons name="clipboard-check-outline" size={24} color="#64B5F6" />
-            </View>
-            <Text style={styles.statValue}>45%</Text>
-            <Text style={styles.statLabel}>Inspection Drop</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <View style={[styles.iconCircle, { backgroundColor: '#E8F5E9' }]}>
-              <FontAwesome5 name="users" size={20} color="#66BB6A" />
-            </View>
-            <Text style={styles.statValue}>8932</Text>
-            <Text style={styles.statLabel}>Users</Text>
-          </View>
-        </View>
-
-        {/* List Section Title */}
-        <Text style={styles.sectionTitle}>Top 5 Barangays by Carbon Emission</Text>
-
-        {/* List Container */}
-        <View style={styles.listContainer}>
-          <BarangayRow rank="1" color="#D32F2F" name="San Francisco" value="265 Tons" percentage="100%" />
-          <BarangayRow rank="2" color="#F57C00" name="Villanueva Ave." value="255 Tons" percentage="95%" />
-          <BarangayRow rank="3" color="#FFB74D" name="Dayangdang" value="250 Tons" percentage="92%" />
-          <BarangayRow rank="4" color="#D4E157" name="Tabuco" value="195 Tons" percentage="70%" />
-          <BarangayRow rank="5" color="#66BB6A" name="Villanueva Ave." value="190 Tons" percentage="68%" />
-        </View>
-
-        {/* Footer Summary */}
-        <View style={styles.footerContainer}>
-          <View style={styles.footerHeaderRow}>
-            <MaterialCommunityIcons name="calendar-month-outline" size={24} color="#555" />
-            <Text style={styles.footerDateText}> January 2026</Text>
-          </View>
-          
-          <View style={styles.footerStatsRow}>
-            <MaterialCommunityIcons name="arrow-up-bold" size={32} color="#66BB6A" />
-            <Text style={styles.footerBigNumber}>350</Text>
-            <Text style={styles.footerUnit}> Tons Total CO2</Text>
-          </View>
-
-          <View style={styles.footerBadgeRow}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>➜ 1%</Text>
-            </View>
-            <Text style={styles.badgeContext}>Compared to December 2025</Text>
-          </View>
-        </View>
-
-      </ScrollView>
-    </SafeAreaView>
+      {/* --- BOTTOM TAB BAR --- */}
+      <View style={styles.bottomTabBar}>
+        <TabItem icon={<SafeIcon name="Map" color="#3B6E4A" fill="#3B6E4A" />} label="Map" active />
+        <TabItem icon={<SafeIcon name="BarChart3" color="#999" />} label="Dashboard" />
+        <TabItem icon={<SafeIcon name="ClipboardList" color="#999" />} label="Reports" />
+        <TabItem icon={<SafeIcon name="Building2" color="#999" />} label="Establish..." />
+      </View>
+    </View>
   );
 };
 
-const BarangayRow = ({ rank, color, name, value, percentage }) => (
-  <View style={styles.rowContainer}>
-    <View style={[styles.rankCircle, { backgroundColor: color }]}>
-      <Text style={styles.rankText}>{rank}</Text>
-    </View>
-    <View style={styles.rowContent}>
-      <View style={styles.rowHeader}>
-        <Text style={styles.rowName}>{name}</Text>
-        <Text style={styles.rowValue}>{value}</Text>
-      </View>
-      <View style={styles.progressBarBg}>
-        <View style={[styles.progressBarFill, { width: percentage, backgroundColor: color }]} />
-      </View>
-    </View>
-  </View>
+const TabItem = ({ icon, label, active }) => (
+  <TouchableOpacity style={styles.tabItem}>
+    {icon}
+    <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+    {active && <View style={styles.activeTabIndicator} />}
+  </TouchableOpacity>
 );
 
-export default EnviAnalyticsScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F0F4F7' },
+  map: { flex: 1 },
+  calloutContainer: { alignItems: 'center', justifyContent: 'flex-end', marginBottom: 5 },
+  calloutBubble: { backgroundColor: 'white', borderRadius: 16, padding: 12, alignItems: 'center', width: 200, elevation: 5 },
+  calloutTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  calloutTempRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
+  calloutTempText: { fontSize: 32, fontWeight: 'bold', color: '#333', marginHorizontal: 8 },
+  fingerprintIcon: { backgroundColor: '#F8E8E0', padding: 4, borderRadius: 8 },
+  calloutDataRow: { flexDirection: 'row', alignItems: 'center' },
+  calloutDataText: { fontSize: 14, color: '#666' },
+  redText: { color: '#D64545', fontWeight: 'bold' },
+  calloutArrow: { width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderTopWidth: 12, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'white' },
+  markerBase: { alignItems: 'center' },
+  overlayContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 80, justifyContent: 'space-between', paddingTop: 40 },
+  topHeaderBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16 },
+  weatherWidget: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', padding: 10, borderRadius: 25, elevation: 3 },
+  weatherText: { fontSize: 16, fontWeight: '600' },
+  topIconsContainer: { flexDirection: 'row' },
+  iconButton: { padding: 8 },
+  locateButton: { backgroundColor: 'white', borderRadius: 12, elevation: 3 },
+  bottomFloatingPanel: { paddingHorizontal: 16, marginBottom: 10 },
+  heatAirButton: { backgroundColor: '#4F835E', flexDirection: 'row', justifyContent: 'space-between', padding: 14, borderRadius: 25, marginBottom: 10 },
+  heatAirButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  carbonStatusPanel: { backgroundColor: 'white', flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderRadius: 25, elevation: 2 },
+  carbonStatusLeft: { flexDirection: 'row', alignItems: 'center' },
+  carbonStatusRight: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F8FF', padding: 6, borderRadius: 16 },
+  carbonStatusText: { fontSize: 15, color: '#555' },
+  bottomTabBar: { flexDirection: 'row', backgroundColor: 'white', paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#EEE', justifyContent: 'space-around', height: 80 },
+  tabItem: { alignItems: 'center' },
+  tabLabel: { fontSize: 11, color: '#999', marginTop: 4 },
+  tabLabelActive: { color: '#3B6E4A', fontWeight: 'bold' },
+  activeTabIndicator: { height: 3, width: 40, backgroundColor: '#3B6E4A', position: 'absolute', top: -12 }
+});
+
+export default MapScreen;
