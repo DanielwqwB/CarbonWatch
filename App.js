@@ -1,5 +1,5 @@
 import React from 'react';
-import MapScreen from './Map.js'; // This matches your file name in the sidebar
+import MapScreen from './Map.js'; 
 
 export default function App() {
   return <MapScreen />;
