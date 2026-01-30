@@ -158,8 +158,6 @@ const MapScreen = () => {
                 <Text style={styles.brgyName}>{selectedEst.establishment_name}</Text>
                 <View style={styles.typeBadge}><Text style={styles.typeText}>{selectedEst.establishment_type}</Text></View>
             </View>
-            <Text style={styles.cityName}>Barangay ID: {selectedEst.barangay_id}</Text>
-            
             <View style={styles.statsRow}>
               <View style={styles.statGroup}>
                 <SafeIcon name="Leaf" color="#5B9A8B" size={24} />
