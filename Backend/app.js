@@ -7,6 +7,10 @@ const sensorRoutes = require('./routes/sensorRoutes');
 const barangayRoutes = require('./routes/barangayRoutes');
 const establishmentRoutes = require('./routes/establishmentRoutes');
 const weatherRoutes = require('./routes/weatherRoutes');
+const weeklyCarbonReportsRoutes = require('./routes/weeklyCarbonReportsRoutes');
+const weeklyTemperatureReportRoutes = require('./routes/weeklyTemperatureReportsRoutes');
+const reportsRoute = require('./routes/reportsRoutes');
+
 
 
 
@@ -27,7 +31,9 @@ app.use('/api', sensorRoutes);
 app.use('/api', barangayRoutes);
 app.use('/api/establishments', establishmentRoutes);
 app.use('/api/weather', weatherRoutes);
-
+app.use('/api/reports/carbon', weeklyCarbonReportsRoutes);
+app.use('/api/reports/temperature', weeklyTemperatureReportRoutes);
+app.use('/api/reports', reportsRoute);
 
 const PORT = 3000;
 
