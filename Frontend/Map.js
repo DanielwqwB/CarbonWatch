@@ -207,4 +207,4 @@ const styles = StyleSheet.create({
   typeText: { fontSize: 10, color: '#5B9A8B', fontWeight: 'bold' }
 });
 
-export default MapScreen;
+export default MapScreen; 
