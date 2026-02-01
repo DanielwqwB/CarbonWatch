@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, SafeAreaView, FlatList, 
   TouchableOpacity, ActivityIndicator, StatusBar, RefreshControl,
-  Modal, ScrollView
+  Modal, ScrollView, TextInput
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
@@ -11,9 +11,17 @@ export default function EstablishmentsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // New State for Modal
+  // Modal for details
   const [selectedItem, setSelectedItem] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  // Filter modal and inputs
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [filterName, setFilterName] = useState('');
+  const [filterLocation, setFilterLocation] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [filteredResults, setFilteredResults] = useState([]);
+  const [noDataFound, setNoDataFound] = useState(false);
 
   const API_URL = 'https://bytetech.onrender.com/api/establishments';
 
@@ -22,6 +30,7 @@ export default function EstablishmentsScreen() {
       const response = await fetch(API_URL);
       const data = await response.json();
       setEstablishments(data);
+      setFilteredResults(data);
     } catch (error) {
       console.error("Fetch error:", error);
     } finally {
@@ -39,10 +48,27 @@ export default function EstablishmentsScreen() {
     fetchEstablishments();
   };
 
-  // Function to handle card press
+  // Detail modal
   const handleItemPress = (item) => {
     setSelectedItem(item);
     setModalVisible(true);
+  };
+
+  // Filter function
+  const applyFilter = () => {
+    const results = establishments.filter(item => {
+      const matchesName = filterName ? item.establishment_name.toLowerCase().includes(filterName.toLowerCase()) : true;
+      const matchesLocation = filterLocation ? item.location?.toLowerCase().includes(filterLocation.toLowerCase()) : true;
+      const matchesDate = filterDate ? item.date === filterDate : true;
+      return matchesName && matchesLocation && matchesDate;
+    });
+
+    setFilteredResults(results);
+    setFilterModalVisible(false);
+
+    if (results.length === 0) {
+      setNoDataFound(true);
+    }
   };
 
   const renderEstablishment = ({ item }) => (
@@ -65,9 +91,9 @@ export default function EstablishmentsScreen() {
       </View>
 
       <View style={styles.trendBadge}>
-        <Ionicons name="triangle" size={10} color="#88B04B" style={styles.trendIcon} />
-        <Text style={styles.trendText}>6%</Text>
-        <Feather name="arrow-up" size={16} color="#88B04B" />
+        <Ionicons name="triangle" size={10} color="#ff0000" style={styles.trendIcon} />
+        <Text style={[styles.trendText, { color: '#ff0000' }]}>6%</Text>
+        <Feather name="arrow-up" size={16} color="#ff0000" />
       </View>
     </TouchableOpacity>
   );
@@ -86,10 +112,12 @@ export default function EstablishmentsScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity><Ionicons name="chevron-back" size={24} color="#4A665E" /></TouchableOpacity>
         <Text style={styles.headerTitle}>Establishments</Text>
-        <TouchableOpacity style={styles.downloadCircle}>
-          <Feather name="download" size={18} color="#4A665E" />
+        <TouchableOpacity 
+          style={styles.downloadCircle} 
+          onPress={() => setFilterModalVisible(true)}
+        >
+          <Feather name="filter" size={18} color="#4A665E" />
         </TouchableOpacity>
       </View>
 
@@ -99,7 +127,7 @@ export default function EstablishmentsScreen() {
         </View>
       ) : (
         <FlatList
-          data={establishments}
+          data={filteredResults}
           keyExtractor={(item, index) => index.toString()}
           renderItem={renderEstablishment}
           contentContainerStyle={styles.listPadding}
@@ -121,7 +149,7 @@ export default function EstablishmentsScreen() {
         />
       )}
 
-      {/* --- ESTABLISHMENT DETAIL MODAL --- */}
+      {/* Detail Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -150,6 +178,72 @@ export default function EstablishmentsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Filter Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={filterModalVisible}
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter Establishments</Text>
+              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+                <Ionicons name="close-circle" size={30} color="#4A665E" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.detailLabel}>Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter establishment name"
+                value={filterName}
+                onChangeText={setFilterName}
+              />
+
+              <Text style={styles.detailLabel}>Location</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter location"
+                value={filterLocation}
+                onChangeText={setFilterLocation}
+              />
+
+              <Text style={styles.detailLabel}>Date (YYYY-MM-DD)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter date"
+                value={filterDate}
+                onChangeText={setFilterDate}
+              />
+
+              <TouchableOpacity style={styles.applyButton} onPress={applyFilter}>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Apply Filter</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* No Data Found Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={noDataFound}
+        onRequestClose={() => setNoDataFound(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ fontSize: 18, color: '#555', marginBottom: 20 }}>No data found</Text>
+            <TouchableOpacity onPress={() => setNoDataFound(false)} style={styles.goBackButton}>
+              <Text style={{ color: '#4A665E', fontWeight: 'bold' }}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -169,7 +263,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FBFA' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: '#333' },
+  headerTitle: { fontSize: 25, fontWeight: '700', color: '#333', marginTop: 20 },
   downloadCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#EEE', justifyContent: 'center', alignItems: 'center' },
   listPadding: { paddingHorizontal: 20, paddingBottom: 20 },
   subHeaderText: { fontSize: 15, color: '#666', marginBottom: 15 },
@@ -184,7 +278,7 @@ const styles = StyleSheet.create({
   densityValue: { fontSize: 14, color: '#666' },
   trendBadge: { flexDirection: 'row', alignItems: 'center' },
   trendText: { color: '#88B04B', fontWeight: 'bold', fontSize: 16, marginRight: 2 },
-  
+
   // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, maxHeight: '80%' },
@@ -193,5 +287,10 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   rowIcon: { marginRight: 15 },
   detailLabel: { fontSize: 12, color: '#888', textTransform: 'uppercase' },
-  detailValue: { fontSize: 16, color: '#333', fontWeight: '500' }
+  detailValue: { fontSize: 16, color: '#333', fontWeight: '500' },
+
+  // Filter Modal Inputs & Buttons
+  input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, padding: 12, marginBottom: 15, fontSize: 14, backgroundColor: '#FAFAFA' },
+  applyButton: { backgroundColor: '#4A665E', padding: 15, borderRadius: 15, alignItems: 'center', marginTop: 10 },
+  goBackButton: { padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#4A665E' }
 });
