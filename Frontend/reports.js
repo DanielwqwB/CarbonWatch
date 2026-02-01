@@ -12,7 +12,7 @@
   import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
   import { PieChart, BarChart, LineChart } from 'react-native-chart-kit';
 
-  const API_URL = 'https://bytetech.onrender.com/api/reports';
+  const API_URL = 'https://bytetech.onrender.com/api/report';
   const FILTER_API_URL = 'https://bytetech.onrender.com/api/filter'; 
   const screenWidth = Dimensions.get('window').width;
 
