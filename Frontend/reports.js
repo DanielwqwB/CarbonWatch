@@ -12,12 +12,11 @@
   import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
   import { PieChart, BarChart, LineChart } from 'react-native-chart-kit';
 
-  const API_URL = 'https://bytetech.onrender.com/api/report';
-  const FILTER_API_URL = 'https://bytetech.onrender.com/api/filter'; 
+  const API_URL = '${API_URL}/reports';
   const screenWidth = Dimensions.get('window').width;
 
   // --- MOCK DATA FOR VISUALS ---
-  const MONTHLY_DATA = {
+  const MONTHLY_DATA = {  
     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
     datasets: [{ data: [220, 180, 190, 150, 180, 240, 230, 240, 200, 210, 245, 250] }]
   };
