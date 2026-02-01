@@ -105,6 +105,7 @@ const MapScreen = () => {
         provider={PROVIDER_GOOGLE}
         initialRegion={NAGA_CITY_CENTER}
         showsUserLocation={true}
+        showsMyLocationButton={false}
         onPress={() => { setSelectedBrgy(null); setSelectedEst(null); setFilteredResults([]); }}
       >
         {barangays.map((brgy, i) => (
@@ -123,28 +124,45 @@ const MapScreen = () => {
         ))}
       </MapView>
 
+      {/* SEARCH CONTAINER - Only one Locate button exists here now */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Icons.Search size={20} color="#999" />
-          <TextInput style={styles.searchInput} placeholder="Search Naga City..." value={searchQuery} onChangeText={handleSearch} />
+          <TextInput 
+            style={styles.searchInput} 
+            placeholder="Search Naga City..." 
+            value={searchQuery} 
+            onChangeText={handleSearch} 
+          />
+          <TouchableOpacity 
+            style={styles.searchLocateBtn} 
+            onPress={async () => {
+              let loc = await Location.getCurrentPositionAsync({});
+              mapRef.current.animateToRegion({ 
+                latitude: loc.coords.latitude, 
+                longitude: loc.coords.longitude, 
+                latitudeDelta: 0.01, 
+                longitudeDelta: 0.01 
+              }, 1000);
+            }}
+          >
+            <Icons.LocateFixed size={22} color="#555" />
+          </TouchableOpacity>
         </View>
+        
         {filteredResults.length > 0 && (
           <View style={styles.resultsList}>
-            <FlatList data={filteredResults} keyExtractor={(item, index) => index.toString()} renderItem={({ item }) => (
-              <TouchableOpacity style={styles.resultItem} onPress={() => selectSearchResult(item)}>
-                <Text style={styles.resultText}>{item.displayName} <Text style={{fontSize: 10, color: '#999'}}>({item.type})</Text></Text>
-              </TouchableOpacity>
+            <FlatList 
+              data={filteredResults} 
+              keyExtractor={(item, index) => index.toString()} 
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.resultItem} onPress={() => selectSearchResult(item)}>
+                  <Text style={styles.resultText}>{item.displayName} <Text style={{fontSize: 10, color: '#999'}}>({item.type})</Text></Text>
+                </TouchableOpacity>
             )} />
           </View>
         )}
       </View>
-
-      <TouchableOpacity style={styles.locateBtn} onPress={async () => {
-        let loc = await Location.getCurrentPositionAsync({});
-        mapRef.current.animateToRegion({ latitude: loc.coords.latitude, longitude: loc.coords.longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 1000);
-      }}>
-        <Icons.Navigation size={24} color="#3B6E4A" />
-      </TouchableOpacity>
     </View>
   );
 
@@ -158,7 +176,7 @@ const MapScreen = () => {
          currentTab === 'Reports' ? <ReportsScreen /> : <EstablishmentScreen />}
       </View>
 
-      {/* RESTORED DATA INFO CARDS */}
+      {/* DATA INFO CARDS */}
       {currentTab === 'Map' && selectedBrgy && (
         <View style={styles.cardOverlay}>
           <View style={styles.infoCard}>
@@ -201,22 +219,23 @@ const MapScreen = () => {
         </View>
       )}
 
+      {/* BOTTOM TAB BAR */}
       <View style={styles.bottomTabBar}>
         <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('Map')}>
-          <Icons.Map size={22} color={currentTab === 'Map' ? '#ff5c4d' : '#ff5c4d'} />
-          <Text style={[styles.tabLabel, { color: currentTab === 'Map' ? '#FF5C4D' : '#FF5C4D' }]}>Map</Text>
+          <Icons.Map size={22} color={currentTab === 'Map' ? '#ff5c4d' : '#999'} />
+          <Text style={[styles.tabLabel, { color: currentTab === 'Map' ? '#FF5C4D' : '#999' }]}>Map</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('Dashboard')}>
-          <Icons.LayoutDashboard size={22} color={currentTab === 'Dashboard' ? '#FF5C4D' : '#FF5C4D'} />
-          <Text style={[styles.tabLabel, { color: currentTab === 'Dashboard' ? '#FF5C4D' : '#FF5C4D' }]}>Dashboard</Text>
+          <Icons.LayoutDashboard size={22} color={currentTab === 'Dashboard' ? '#FF5C4D' : '#999'} />
+          <Text style={[styles.tabLabel, { color: currentTab === 'Dashboard' ? '#FF5C4D' : '#999' }]}>Dashboard</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('Reports')}>
-          <Icons.ClipboardList size={22} color={currentTab === 'Reports' ? '#FF5C4D' : '#FF5C4D'} />
-          <Text style={[styles.tabLabel, { color: currentTab === 'Reports' ? '#FF5C4D' : '#FF5C4D' }]}>Reports</Text>
+          <Icons.ClipboardList size={22} color={currentTab === 'Reports' ? '#FF5C4D' : '#999'} />
+          <Text style={[styles.tabLabel, { color: currentTab === 'Reports' ? '#FF5C4D' : '#999' }]}>Reports</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('Establishment')}>
-          <Icons.Building2 size={22} color={currentTab === 'Establishment' ? '#FF5C4D' : '#FF5C4D'} />
-          <Text style={[styles.tabLabel, { color: currentTab === 'Establishment' ? '#FF5C4D' : '#FF5C4D' }]}>Establishment</Text>
+          <Icons.Building2 size={22} color={currentTab === 'Establishment' ? '#FF5C4D' : '#999'} />
+          <Text style={[styles.tabLabel, { color: currentTab === 'Establishment' ? '#FF5C4D' : '#999' }]}>Establishment</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -226,13 +245,31 @@ const MapScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   map: { flex: 1 },
-  searchContainer: { position: 'absolute', top: 50, width: '100%', alignItems: 'center', zIndex: 10 },
-  searchBar: { flexDirection: 'row', width: width * 0.9, backgroundColor: 'white', borderRadius: 15, paddingHorizontal: 15, height: 50, alignItems: 'center', elevation: 5 },
-  searchInput: { flex: 1, marginLeft: 10 },
+  searchContainer: { position: 'absolute', top: 55, width: '100%', alignItems: 'center', zIndex: 10 },
+  searchBar: { 
+    flexDirection: 'row', 
+    width: width * 0.9, 
+    backgroundColor: 'white', 
+    borderRadius: 15, 
+    paddingHorizontal: 15, 
+    height: 50, 
+    alignItems: 'center', 
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 15 },
+  searchLocateBtn: { 
+    padding: 5, 
+    borderLeftWidth: 1, 
+    borderLeftColor: '#EEE', 
+    marginLeft: 5 
+  },
   resultsList: { width: width * 0.9, backgroundColor: 'white', marginTop: 5, borderRadius: 15, maxHeight: 200, elevation: 5 },
   resultItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },
   resultText: { fontWeight: '600' },
-  locateBtn: { position: 'absolute', right: 20, bottom: 100, backgroundColor: 'white', padding: 12, borderRadius: 30, elevation: 5, zIndex: 5 },
   bottomTabBar: { flexDirection: 'row', height: 80, backgroundColor: 'white', borderTopWidth: 1, borderColor: '#EEE', paddingBottom: 10, zIndex: 100 },
   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tabLabel: { fontSize: 10, marginTop: 4 },
@@ -254,4 +291,4 @@ const styles = StyleSheet.create({
   closeBtnText: { color: '#3B6E4A', fontWeight: 'bold' }
 });
 
-export default MapScreen;
+export default MapScreen; 
