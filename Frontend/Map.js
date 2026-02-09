@@ -11,7 +11,8 @@ import { API_URL } from './config';
 // Screen Imports
 import DashboardScreen from './dashboard';
 import ReportsScreen from './reports';
-import EstablishmentScreen from './establishment';
+import PredictionScreen from './prediction';
+import PlacesScreen from './places';
 
 const { width } = Dimensions.get('window');
 const LOGO_IMG = require('./assets/image.png'); 
@@ -33,7 +34,7 @@ const MapScreen = () => {
   const [currentTab, setCurrentTab] = useState('Map');
   const [selectedBrgy, setSelectedBrgy] = useState(null);
   const [selectedEst, setSelectedEst] = useState(null);
-  const [barangays, setBarangays] = useState([]);
+  const [barangay, setBarangay] = useState([]);
   const [establishments, setEstablishments] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,12 +55,12 @@ const MapScreen = () => {
     try {
       setLoading(true);
       const [brgyRes, estRes] = await Promise.all([
-        fetch(`${API_URL}/barangay`),
-        fetch(`https://bytetech.onrender.com/api/establishments`)
+        fetch(`https://bytetech-final1.onrender.com/barangay`),
+        fetch(`https://bytetech-final1.onrender.com/establishment`)
       ]);
       const brgyData = await brgyRes.json();
       const estData = await estRes.json();
-      setBarangays(Array.isArray(brgyData) ? brgyData : (brgyData.data || []));
+      setBarangay(Array.isArray(brgyData) ? brgyData : (brgyData.data || []));
       setEstablishments(Array.isArray(estData) ? estData : (estData.data || []));
     } catch (error) {
       console.error("Fetch Error:", error);
@@ -80,7 +81,7 @@ const MapScreen = () => {
     setSearchQuery(text);
     if (text.length > 0) {
       const combined = [
-        ...barangays.map(b => ({ ...b, type: 'Barangay', displayName: b.name })),
+        ...barangay.map(b => ({ ...b, type: 'Barangay', displayName: b.barangay_name })),
         ...establishments.map(e => ({ ...e, type: 'Establishment', displayName: e.establishment_name }))
       ];
       const filtered = combined.filter(item => item.displayName.toLowerCase().includes(text.toLowerCase()));
@@ -108,7 +109,7 @@ const MapScreen = () => {
         showsMyLocationButton={false}
         onPress={() => { setSelectedBrgy(null); setSelectedEst(null); setFilteredResults([]); }}
       >
-        {barangays.map((brgy, i) => (
+        {barangay.map((brgy, i) => (
           <Marker key={`b-${i}`} coordinate={{ latitude: parseFloat(brgy.latitude), longitude: parseFloat(brgy.longitude) }} onPress={() => { setSelectedEst(null); setSelectedBrgy(brgy); }}>
             <View style={[styles.customMarker, { borderColor: getMarkerColor(brgy.temperature_c) }]}>
               <Image source={LOGO_IMG} style={styles.markerLogo} />
@@ -173,14 +174,15 @@ const MapScreen = () => {
       <View style={{ flex: 1 }}>
         {currentTab === 'Map' ? renderMapContent() : 
          currentTab === 'Dashboard' ? <DashboardScreen /> : 
-         currentTab === 'Reports' ? <ReportsScreen /> : <EstablishmentScreen />}
+         currentTab === 'Reports' ? <ReportsScreen /> : 
+         currentTab === 'Prediction' ? <PredictionScreen /> : <PlacesScreen />}
       </View>
 
       {/* DATA INFO CARDS */}
       {currentTab === 'Map' && selectedBrgy && (
         <View style={styles.cardOverlay}>
           <View style={styles.infoCard}>
-            <Text style={styles.brgyName}>Brgy. {selectedBrgy.name}</Text>
+            <Text style={styles.brgyName}>Brgy. {selectedBrgy.barangay_name}</Text>
             <Text style={styles.cityName}>{selectedBrgy.city || 'Naga City'}</Text>
             <View style={styles.statsRow}>
               <View style={styles.statGroup}>
@@ -233,9 +235,13 @@ const MapScreen = () => {
           <Icons.ClipboardList size={22} color={currentTab === 'Reports' ? '#FF5C4D' : '#999'} />
           <Text style={[styles.tabLabel, { color: currentTab === 'Reports' ? '#FF5C4D' : '#999' }]}>Reports</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('Establishment')}>
-          <Icons.Building2 size={22} color={currentTab === 'Establishment' ? '#FF5C4D' : '#999'} />
-          <Text style={[styles.tabLabel, { color: currentTab === 'Establishment' ? '#FF5C4D' : '#999' }]}>Establishment</Text>
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('Prediction')}>
+          <Icons.TrendingUp size={22} color={currentTab === 'Prediction' ? '#FF5C4D' : '#999'} />
+          <Text style={[styles.tabLabel, { color: currentTab === 'Prediction' ? '#FF5C4D' : '#999' }]}>Prediction</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('Places')}>
+          <Icons.MapPin size={22} color={currentTab === 'Places' ? '#FF5C4D' : '#999'} />
+          <Text style={[styles.tabLabel, { color: currentTab === 'Places' ? '#FF5C4D' : '#999' }]}>Places</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -291,4 +297,4 @@ const styles = StyleSheet.create({
   closeBtnText: { color: '#3B6E4A', fontWeight: 'bold' }
 });
 
-export default MapScreen; 
+export default MapScreen;

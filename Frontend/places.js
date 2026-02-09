@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
-export default function EstablishmentsScreen() {
+export default function PlacesScreen() {
   const [establishments, setEstablishments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,7 +23,7 @@ export default function EstablishmentsScreen() {
   const [filteredResults, setFilteredResults] = useState([]);
   const [noDataFound, setNoDataFound] = useState(false);
 
-  const API_URL = 'https://bytetech.onrender.com/api/establishments';
+  const API_URL = 'https://bytetech-final1.onrender.com/establishment';
 
   const fetchEstablishments = async () => {
     try {
@@ -112,7 +112,7 @@ export default function EstablishmentsScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Establishments</Text>
+        <Text style={styles.headerTitle}>Places</Text>
         <TouchableOpacity 
           style={styles.downloadCircle} 
           onPress={() => setFilterModalVisible(true)}
@@ -141,7 +141,7 @@ export default function EstablishmentsScreen() {
                   <Text style={styles.filterText}> April 2024</Text>
                 </View>
                 <View style={styles.unitSelector}>
-                  <Text style={styles.filterText}>By CO₂e-</Text>
+                  <Text style={styles.filterText}>By CO₂e</Text>
                 </View>
               </View>
             </View>
@@ -159,7 +159,7 @@ export default function EstablishmentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Establishment Details</Text>
+              <Text style={styles.modalTitle}>Place Details</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close-circle" size={30} color="#4A665E" />
               </TouchableOpacity>
@@ -189,7 +189,7 @@ export default function EstablishmentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Establishments</Text>
+              <Text style={styles.modalTitle}>Filter Places</Text>
               <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
                 <Ionicons name="close-circle" size={30} color="#4A665E" />
               </TouchableOpacity>
@@ -199,7 +199,7 @@ export default function EstablishmentsScreen() {
               <Text style={styles.detailLabel}>Name</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter establishment name"
+                placeholder="Enter place name"
                 value={filterName}
                 onChangeText={setFilterName}
               />
