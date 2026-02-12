@@ -12,7 +12,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-chart-kit';
 
-const BASE_API_URL = 'https://bytetech-final1.onrender.com/sensor_data';
+const BASE_URL = 'https://bytetech-final1.onrender.com/reports';
 const screenWidth = Dimensions.get('window').width;
 
 export default function Reports({ navigation }) {
@@ -21,7 +21,7 @@ export default function Reports({ navigation }) {
   const [establishments, setEstablishments] = useState([]);
   const [barangayData, setBarangayData] = useState([]);
   const [reportType, setReportType] = useState('monthly'); // 'monthly' or 'weekly'
-  const [selectedMonth, setSelectedMonth] = useState('December 2026');
+  const [selectedMonth, setSelectedMonth] = useState('February 2026');
   const [carbonStats, setCarbonStats] = useState({
     red: 0,
     yellow: 0,
@@ -33,7 +33,6 @@ export default function Reports({ navigation }) {
     fetchBarangayData();
   }, []);
 
-  // Refetch data when report type changes
   useEffect(() => {
     fetchReports();
   }, [reportType]);
@@ -44,20 +43,16 @@ export default function Reports({ navigation }) {
       const response = await res.json();
       
       if (response && response.data) {
-        // Calculate CO2 emissions based on temperature (higher temp = higher emissions)
         const barangaysWithEmissions = response.data.map(barangay => {
-          // Formula: Base emission (10) + temperature factor
-          // Higher density areas get multiplier
           const densityMultiplier = barangay.density === 'High' ? 1.5 : 1.0;
           const co2_emission = ((barangay.temperature_c - 25) * 2 * densityMultiplier) + 10;
           
           return {
             ...barangay,
-            co2_emission: Math.max(co2_emission, 5) // Minimum 5 tons
+            co2_emission: Math.max(co2_emission, 5)
           };
         });
         
-        // Sort by emissions and get top barangays
         const sortedBarangays = barangaysWithEmissions
           .sort((a, b) => b.co2_emission - a.co2_emission);
         
@@ -69,48 +64,117 @@ export default function Reports({ navigation }) {
     }
   };
 
+  // FIXED: Aggregation function to handle both monthly and weekly data
+  const aggregateData = (rawData, type) => {
+    if (!rawData || rawData.length === 0) return [];
+    
+    if (type === 'monthly') {
+      const monthlyMap = {};
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      // Initialize all 12 months with 0
+      for (let i = 0; i < 12; i++) {
+        monthlyMap[i] = {
+          month: monthNames[i],
+          month_number: i,
+          co2_emission: 0,
+          count: 0
+        };
+      }
+      
+      rawData.forEach(record => {
+        const date = new Date(record.recorded_at);
+        const monthIndex = date.getMonth();
+        
+        // Convert from decimals to tons (multiply by 1000)
+        const emission = parseFloat(record.co2_emission) || 0;
+        monthlyMap[monthIndex].co2_emission += (emission * 1000);
+        monthlyMap[monthIndex].count += 1;
+      });
+      
+      return Object.values(monthlyMap);
+      
+    } else {
+      // FIXED: Weekly aggregation logic
+      const weeklyMap = {};
+      const now = new Date();
+      
+      // Initialize 4 weeks (Week 1 = most recent, Week 4 = oldest)
+      for (let i = 0; i < 4; i++) {
+        weeklyMap[i] = {
+          week: `Week ${4 - i}`,
+          week_number: i,
+          co2_emission: 0,
+          count: 0
+        };
+      }
+      
+      rawData.forEach(record => {
+        const recordDate = new Date(record.recorded_at);
+        const daysDiff = Math.floor((now - recordDate) / (1000 * 60 * 60 * 24));
+        const weekIndex = Math.floor(daysDiff / 7);
+        
+        // Map to correct week (0 = current week, 3 = 3 weeks ago)
+        if (weekIndex >= 0 && weekIndex < 4) {
+          const emission = parseFloat(record.co2_emission) || 0;
+          weeklyMap[weekIndex].co2_emission += (emission * 1000); // Convert to tons
+          weeklyMap[weekIndex].count += 1;
+        }
+      });
+      
+      // Return weeks in reverse order (Week 1 first, Week 4 last)
+      return Object.values(weeklyMap).reverse();
+    }
+  };
+
   const fetchReports = async () => {
     try {
       setLoading(true);
       
-      // Determine API endpoint based on report type
-      const apiEndpoint = reportType === 'monthly' 
-        ? `https://bytetech-final1.onrender.com/reports/monthly` 
-        : `https://bytetech-final1.onrender.com/reports/weekly`;
+      // Use the correct API endpoint based on report type
+      const endpoint = reportType === 'monthly' 
+        ? `${BASE_URL}/monthly`
+        : `${BASE_URL}/weekly`;
       
-      const res = await fetch(apiEndpoint);
+      const res = await fetch(endpoint);
       const responseData = await res.json();
       
-      // Handle different API response structures
-      let data = [];
+      console.log('API Endpoint:', endpoint);
+      console.log('Raw API Response:', responseData);
       
-      // Check if response is an array
-      if (Array.isArray(responseData)) {
-        data = responseData;
-      } 
-      // Check if response has a data property that's an array
-      else if (responseData && Array.isArray(responseData.data)) {
-        data = responseData.data;
-      }
-      // Check if response has an establishments property
-      else if (responseData && Array.isArray(responseData.establishments)) {
-        data = responseData.establishments;
-      }
-      // Check if response has a reports property
-      else if (responseData && Array.isArray(responseData.reports)) {
-        data = responseData.reports;
+      // Extract data from the API structure
+      let rawData = [];
+      if (responseData && Array.isArray(responseData.sensorData)) {
+        rawData = responseData.sensorData;
+      } else if (Array.isArray(responseData)) {
+        rawData = responseData;
+      } else if (responseData && Array.isArray(responseData.data)) {
+        rawData = responseData.data;
       }
       
-      console.log('API Response:', responseData);
-      console.log('Processed Data:', data);
+      console.log(`${reportType} data count:`, rawData.length);
+      if (rawData.length > 0) {
+        console.log('Sample record:', rawData[0]);
+      }
       
-      setEstablishments(data);
+      // Aggregate data based on report type
+      const aggregatedData = aggregateData(rawData, reportType);
+      
+      console.log('Aggregated Data:', aggregatedData);
+      
+      setEstablishments(aggregatedData);
 
-      // Calculate carbon stats from API data
-      if (data.length > 0) {
-        const totalRed = data.filter(e => e.co2_emission > 50).reduce((sum, e) => sum + e.co2_emission, 0);
-        const totalYellow = data.filter(e => e.co2_emission > 20 && e.co2_emission <= 50).reduce((sum, e) => sum + e.co2_emission, 0);
-        const totalGreen = data.filter(e => e.co2_emission <= 20).reduce((sum, e) => sum + e.co2_emission, 0);
+      // Calculate carbon stats from aggregated data
+      if (aggregatedData.length > 0) {
+        const totalRed = aggregatedData
+          .filter(e => e.co2_emission > 50)
+          .reduce((sum, e) => sum + e.co2_emission, 0);
+        const totalYellow = aggregatedData
+          .filter(e => e.co2_emission > 20 && e.co2_emission <= 50)
+          .reduce((sum, e) => sum + e.co2_emission, 0);
+        const totalGreen = aggregatedData
+          .filter(e => e.co2_emission <= 20)
+          .reduce((sum, e) => sum + e.co2_emission, 0);
 
         setCarbonStats({
           red: totalRed,
@@ -120,6 +184,17 @@ export default function Reports({ navigation }) {
       } else {
         setCarbonStats({ red: 0, yellow: 0, green: 0 });
       }
+
+      // Update barangay data from the breakdown if available
+      if (responseData && Array.isArray(responseData.breakdown)) {
+        const barangaysFromBreakdown = responseData.breakdown.map(b => ({
+          barangay_name: b.barangay_name,
+          co2_emission: parseFloat(b.total) * 1000, // Convert to tons
+          percentage: parseFloat(b.percentage)
+        }));
+        setBarangayData(barangaysFromBreakdown);
+      }
+      
     } catch (err) {
       console.error('API Error:', err);
       setEstablishments([]);
@@ -133,50 +208,48 @@ export default function Reports({ navigation }) {
   const onRefresh = () => {
     setRefreshing(true);
     fetchReports();
-    fetchBarangayData();
   };
 
-  // Process API data for charts
   const processChartData = () => {
     if (!establishments || !Array.isArray(establishments) || establishments.length === 0) {
-      // Fallback to default empty data
       return reportType === 'monthly' 
         ? { labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }] }
         : { labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'], datasets: [{ data: [0, 0, 0, 0] }] };
     }
 
-    // Extract chart data from API response
     if (reportType === 'monthly') {
-      const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthlyEmissions = establishments.slice(0, 12).map(e => e.co2_emission || 0);
+      const labels = establishments.map(e => e.month).filter(Boolean);
+      const data = establishments.map(e => Math.max(0, Math.round(e.co2_emission) || 0));
       
-      // Pad with zeros if less than 12 months
-      while (monthlyEmissions.length < 12) {
-        monthlyEmissions.push(0);
-      }
+      // Ensure we have exactly 12 data points
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const finalLabels = labels.length === 12 ? labels : monthNames;
+      const paddingNeeded = Math.max(0, 12 - data.length);
+      const finalData = data.length === 12 ? data : [...data, ...Array(paddingNeeded).fill(0)];
       
       return {
-        labels: monthLabels,
-        datasets: [{ data: monthlyEmissions }]
+        labels: finalLabels,
+        datasets: [{ data: finalData }]
       };
     } else {
-      const weeklyEmissions = establishments.slice(0, 4).map(e => e.co2_emission || 0);
+      const labels = establishments.map(e => e.week).filter(Boolean);
+      const data = establishments.map(e => Math.max(0, Math.round(e.co2_emission) || 0));
       
-      // Pad with zeros if less than 4 weeks
-      while (weeklyEmissions.length < 4) {
-        weeklyEmissions.push(0);
-      }
+      // Ensure we have exactly 4 data points
+      const weekNames = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+      const finalLabels = labels.length === 4 ? labels : weekNames;
+      const paddingNeeded = Math.max(0, 4 - data.length);
+      const finalData = data.length === 4 ? data : [...data, ...Array(paddingNeeded).fill(0)];
       
       return {
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-        datasets: [{ data: weeklyEmissions }]
+        labels: finalLabels,
+        datasets: [{ data: finalData }]
       };
     }
   };
 
   const chartData = processChartData();
   
-  // Calculate total emissions from actual data
   const calculateTotalEmission = () => {
     if (!establishments || !Array.isArray(establishments) || establishments.length === 0) {
       return 0;
@@ -185,7 +258,6 @@ export default function Reports({ navigation }) {
     return Math.round(total);
   };
 
-  // Calculate target and percentage in real-time
   const calculateTargetInfo = () => {
     const total = calculateTotalEmission();
     const target = reportType === 'monthly' ? 375 : 100;
@@ -193,24 +265,27 @@ export default function Reports({ navigation }) {
     return `${percentage}% of ${target} Tons`;
   };
 
-  // Calculate trend based on comparison with previous period
+  // FIXED: Trend calculation for weekly data
   const calculateTrend = () => {
     if (!establishments || !Array.isArray(establishments) || establishments.length === 0) {
-      return { value: '0%', direction: 'up' };
-    }
-
-    // For monthly: compare current month vs previous month
-    // For weekly: compare current week vs previous week
-    const dataLength = reportType === 'monthly' ? 12 : 4;
-    const currentData = establishments.slice(0, dataLength);
-    
-    if (currentData.length < 2) {
       return { value: '0%', direction: 'neutral' };
     }
 
-    // Get most recent and previous period
-    const current = currentData[0]?.co2_emission || 0;
-    const previous = currentData[1]?.co2_emission || 0;
+    // For weekly: compare Week 1 (index 0, most recent) to Week 2 (index 1)
+    // For monthly: compare most recent month to previous month
+    const sortedData = [...establishments];
+    
+    if (reportType === 'monthly') {
+      sortedData.sort((a, b) => b.month_number - a.month_number);
+    }
+    // For weekly, data is already in correct order (Week 1 first)
+    
+    if (sortedData.length < 2) {
+      return { value: '0%', direction: 'neutral' };
+    }
+
+    const current = sortedData[0]?.co2_emission || 0;
+    const previous = sortedData[1]?.co2_emission || 0;
 
     if (previous === 0) {
       return { value: '0%', direction: 'neutral' };
@@ -232,7 +307,6 @@ export default function Reports({ navigation }) {
   const trend = calculateTrend();
   const trendValue = trend.value;
 
-  // Process top barangays
   const getTopBarangays = () => {
     if (!barangayData || barangayData.length === 0) {
       return [
@@ -242,12 +316,36 @@ export default function Reports({ navigation }) {
       ];
     }
 
-    // Get top 2 barangays by emissions
-    const top2 = barangayData.slice(0, 2);
-    const totalEmissions = barangayData.reduce((sum, b) => sum + b.co2_emission, 0);
-    const top2Emissions = top2.reduce((sum, b) => sum + b.co2_emission, 0);
-    const othersEmissions = totalEmissions - top2Emissions;
-
+    // Sort by co2_emission
+    const sortedBarangays = [...barangayData].sort((a, b) => b.co2_emission - a.co2_emission);
+    
+    // Get top 2 barangays
+    const top2 = sortedBarangays.slice(0, 2);
+    
+    // If we have percentage data from API, use it
+    if (top2[0].percentage !== undefined) {
+      const top1Percentage = Math.round(parseFloat(top2[0].percentage));
+      const top2Percentage = Math.round(parseFloat(top2[1].percentage));
+      const othersPercentage = 100 - top1Percentage - top2Percentage;
+      
+      return [
+        { name: top2[0].barangay_name, value: top1Percentage },
+        { name: top2[1].barangay_name, value: top2Percentage },
+        { name: 'Other', value: othersPercentage }
+      ];
+    }
+    
+    // Otherwise calculate from emissions
+    const totalEmissions = sortedBarangays.reduce((sum, b) => sum + (b.co2_emission || 0), 0);
+    
+    if (totalEmissions === 0) {
+      return [
+        { name: 'San Francisco', value: 66 },
+        { name: 'Villanueva Ave.', value: 19 },
+        { name: 'Other', value: 15 }
+      ];
+    }
+    
     const top1Percentage = Math.round((top2[0].co2_emission / totalEmissions) * 100);
     const top2Percentage = Math.round((top2[1].co2_emission / totalEmissions) * 100);
     const othersPercentage = 100 - top1Percentage - top2Percentage;
@@ -261,7 +359,6 @@ export default function Reports({ navigation }) {
 
   const topBarangays = getTopBarangays();
 
-  // --- MAIN SCREEN ---
   if (loading) {
     return (
       <View style={styles.center}>
@@ -273,7 +370,6 @@ export default function Reports({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reporting</Text>
         <TouchableOpacity>
@@ -287,7 +383,6 @@ export default function Reports({ navigation }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* TOGGLE BUTTONS - Monthly/Weekly */}
         <View style={styles.toggleContainer}>
           <TouchableOpacity
             style={[
@@ -320,18 +415,16 @@ export default function Reports({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* DATE SELECTOR */}
         <View style={styles.dateCard}>
           <View style={styles.rowCenter}>
             <MaterialCommunityIcons name="calendar-month" size={20} color="#4CAF50" />
             <Text style={styles.dateText}>
-              {reportType === 'monthly' ? selectedMonth : 'January 21 - 27, 2026'}
+              {reportType === 'monthly' ? selectedMonth : 'February 7 - 13, 2026'}
             </Text>
           </View>
           <Ionicons name="chevron-down" size={20} color="#777" />
         </View>
 
-        {/* 1. CARBON EMISSION SUMMARY CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>Carbon Emission Summary</Text>
@@ -366,7 +459,6 @@ export default function Reports({ navigation }) {
 
           <View style={styles.divider} />
 
-          {/* Top Barangays List */}
           <View style={styles.locationList}>
             {topBarangays.map((loc, index) => (
               <View key={index} style={styles.locationRow}>
@@ -377,7 +469,6 @@ export default function Reports({ navigation }) {
           </View>
         </View>
 
-        {/* 2. CITY-WIDE CHART */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.rowBetween}>
@@ -410,7 +501,6 @@ export default function Reports({ navigation }) {
               withInnerLines={false}
             />
 
-            {/* Target Line Overlay */}
             <View style={styles.targetLineContainer}>
               <View style={styles.dashedLine} />
             </View>
@@ -432,7 +522,6 @@ export default function Reports({ navigation }) {
           </View>
         </View>
 
-        {/* 3. ACTIONABLE INSIGHTS */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>Actionable Insights</Text>
@@ -441,15 +530,15 @@ export default function Reports({ navigation }) {
           <View style={styles.insightList}>
             <View style={styles.bulletRow}>
               <Text style={styles.bulletPoint}>•</Text>
-              <Text style={styles.insightText}>Review HVAC in SF Facility</Text>
+              <Text style={styles.insightText}>Review HVAC in {topBarangays[0].name} Facility</Text>
             </View>
             <View style={styles.bulletRow}>
               <Text style={styles.bulletPoint}>•</Text>
-              <Text style={styles.insightText}>Switch Fleet to EV in Villanueva Ave</Text>
+              <Text style={styles.insightText}>Switch Fleet to EV in {topBarangays[1].name}</Text>
             </View>
             <View style={styles.bulletRow}>
               <Text style={styles.bulletPoint}>•</Text>
-              <Text style={styles.insightText}>Offset 50 Tons</Text>
+              <Text style={styles.insightText}>Offset {Math.round(calculateTotalEmission() * 0.3)} Tons</Text>
             </View>
           </View>
         </View>
@@ -468,8 +557,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-
-  /* Header */
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -484,8 +571,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111'
   },
-
-  /* Toggle Buttons */
   toggleContainer: {
     flexDirection: 'row',
     marginHorizontal: 16,
@@ -512,8 +597,6 @@ const styles = StyleSheet.create({
   toggleTextActive: {
     color: '#FFFFFF',
   },
-
-  /* Date Card */
   dateCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -536,8 +619,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center'
   },
-
-  /* General Card Style */
   card: {
     backgroundColor: '#fff',
     marginHorizontal: 16,
@@ -563,8 +644,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-
-  /* Summary Card Internals */
   summaryTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -610,7 +689,8 @@ const styles = StyleSheet.create({
   trendText: {
     color: '#D32F2F',
     fontSize: 12,
-    fontWeight: '600'
+    fontWeight: '600',
+    marginLeft: 4
   },
   divider: {
     height: 1,
@@ -633,8 +713,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700'
   },
-
-  /* Chart Card Internals */
   chartContainer: {
     alignItems: 'center',
     overflow: 'hidden'
@@ -672,8 +750,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#555'
   },
-
-  /* Actionable Insights */
   insightList: {
     marginTop: 5
   },
