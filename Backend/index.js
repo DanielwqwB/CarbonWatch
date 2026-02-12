@@ -7,12 +7,15 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// ========================
 // MySQL connection
+// ========================
 const db = mysql.createConnection({
-    host: 'mysql-32f781d8-gbox-6009.h.aivencloud.com',
+    host: 'mmysql-360d30a7-gbox-6009.a.aivencloud.com',
     user: 'avnadmin',
-    password: 'AVNS_ZqGKBUdWc2m5Ys2X2qr',
-    database: 'defaultdb'
+    password: 'AVNS_xRg_1Ymj9oje4V_wSeq',
+    database: 'defaultdb',
+    port: 11105
 });
 
 db.connect(err => {
@@ -23,63 +26,81 @@ db.connect(err => {
     }
 });
 
-
+// ========================
 // Helper: Carbon level logic
+// ========================
 function getCarbonLevel(co2) {
+    if (co2 === null || co2 === undefined) return null;
     if (co2 >= 0.2) return 'VERY HIGH';
     if (co2 >= 0.15) return 'HIGH';
     if (co2 >= 0.08) return 'NORMAL';
     return 'LOW';
 }
 
+// ========================
+// Helper: Heat index calculation (optional)
+// ========================
+function calculateHeatIndex(temperature_c, humidity) {
+    if (temperature_c === undefined || humidity === undefined) return null;
+    // simple approximation formula
+    const T = temperature_c;
+    const R = humidity;
+    const HI = 0.5 * (T + 61.0 + ((T-68.0)*1.2) + (R*0.094));
+    return parseFloat(HI.toFixed(2));
+}
 
+// ========================
 // POST: Insert sensor data
+// ========================
 app.post('/sensor-data', (req, res) => {
     const {
         sensor_id,
-        mq2_analog,
-        methane_ppm,
-        co2_density,
-        temperature_c,
-        humidity
+        co2_density = null,
+        temperature_c = null,
+        humidity = null
     } = req.body;
 
-    if (!sensor_id || !mq2_analog || !temperature_c || !humidity) {
-        return res.status(400).json({ error: 'Missing required fields' });
+    // Validate required field
+    if (!sensor_id) {
+        return res.status(400).json({ 
+            error: 'Missing required field: sensor_id' 
+        });
     }
 
-    const temperature_f = (temperature_c * 9/5) + 32;
+    const heat_index_c = calculateHeatIndex(temperature_c, humidity);
     const carbon_level = getCarbonLevel(co2_density);
 
     const sql = `
         INSERT INTO sensor_data
-        (sensor_id, mq2_analog, methane_ppm, co2_density,
-         temperature_c, temperature_f, humidity, carbon_level)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (sensor_id, co2_density, temperature_c, humidity, heat_index_c, carbon_level)
+        VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    db.query(sql, [
+    const values = [
         sensor_id,
-        mq2_analog,
-        methane_ppm,
         co2_density,
         temperature_c,
-        temperature_f,
         humidity,
+        heat_index_c,
         carbon_level
-    ], (err, result) => {
+    ];
+
+    db.query(sql, values, (err, result) => {
         if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Database error' });
+            console.error('DB Insert Error:', err);
+            return res.status(500).json({ error: 'Database error', details: err.message });
         }
-        res.json({ success: true, data_id: result.insertId });
+        res.status(201).json({ success: true, data_id: result.insertId });
     });
 });
 
-
-// GET: Latest sensor data
+// ========================
+// GET: Latest sensor data for a sensor
+// ========================
 app.get('/sensor-data/latest/:sensor_id', (req, res) => {
     const { sensor_id } = req.params;
+
+    if (!sensor_id) return res.status(400).json({ error: 'sensor_id is required' });
 
     const sql = `
         SELECT *
@@ -90,13 +111,19 @@ app.get('/sensor-data/latest/:sensor_id', (req, res) => {
     `;
 
     db.query(sql, [sensor_id], (err, results) => {
-        if (err) return res.status(500).send(err);
+        if (err) {
+            console.error('DB Query Error:', err);
+            return res.status(500).json({ error: 'Database error', details: err.message });
+        }
+        if (results.length === 0) return res.status(404).json({ message: 'No data found for this sensor' });
         res.json(results[0]);
     });
 });
 
+// ========================
 // Start server
-
-app.listen(3000, () => {
-    console.log('Server running on port 3000');
+// ========================
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
