@@ -8,8 +8,12 @@ import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 export default function PlacesScreen() {
   const [establishments, setEstablishments] = useState([]);
+  const [barangays, setBarangays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Filter toggle: 'Barangay' or 'Establishment'
+  const [activeFilter, setActiveFilter] = useState('Barangay');
   
   // Modal for details
   const [selectedItem, setSelectedItem] = useState(null);
@@ -23,14 +27,40 @@ export default function PlacesScreen() {
   const [filteredResults, setFilteredResults] = useState([]);
   const [noDataFound, setNoDataFound] = useState(false);
 
-  const API_URL = 'https://bytetech-final1.onrender.com/establishment';
+  const ESTABLISHMENT_API = 'https://bytetech-final1.onrender.com/establishment';
+  const BARANGAY_API = 'https://bytetech-final1.onrender.com/barangay';
 
-  const fetchEstablishments = async () => {
+  const fetchAllData = async () => {
     try {
-      const response = await fetch(API_URL);
-      const data = await response.json();
-      setEstablishments(data);
-      setFilteredResults(data);
+      setLoading(true);
+      
+      const [estResponse, brgyResponse] = await Promise.all([
+        fetch(ESTABLISHMENT_API),
+        fetch(BARANGAY_API)
+      ]);
+      
+      const estData = await estResponse.json();
+      const brgyData = await brgyResponse.json();
+      
+      console.log('Establishment Data:', estData);
+      console.log('Barangay Data:', brgyData);
+      
+      // Handle both array and object responses
+      const establishments = Array.isArray(estData) ? estData : (estData.data || []);
+      const barangays = Array.isArray(brgyData) ? brgyData : (brgyData.data || []);
+      
+      console.log('Processed Establishments:', establishments);
+      console.log('Processed Barangays:', barangays);
+      
+      setEstablishments(establishments);
+      setBarangays(barangays);
+      
+      // Set initial filtered results based on active filter
+      if (activeFilter === 'Barangay') {
+        setFilteredResults(barangays);
+      } else {
+        setFilteredResults(establishments);
+      }
     } catch (error) {
       console.error("Fetch error:", error);
     } finally {
@@ -40,12 +70,19 @@ export default function PlacesScreen() {
   };
 
   useEffect(() => {
-    fetchEstablishments();
+    fetchAllData();
   }, []);
+
+  useEffect(() => {
+    // Update filtered results when filter changes
+    const newData = activeFilter === 'Barangay' ? barangays : establishments;
+    console.log(`Filter changed to ${activeFilter}, setting data:`, newData);
+    setFilteredResults(newData);
+  }, [activeFilter]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchEstablishments();
+    fetchAllData();
   };
 
   // Detail modal
@@ -56,9 +93,12 @@ export default function PlacesScreen() {
 
   // Filter function
   const applyFilter = () => {
-    const results = establishments.filter(item => {
-      const matchesName = filterName ? item.establishment_name.toLowerCase().includes(filterName.toLowerCase()) : true;
-      const matchesLocation = filterLocation ? item.location?.toLowerCase().includes(filterLocation.toLowerCase()) : true;
+    const dataSource = activeFilter === 'Barangay' ? barangays : establishments;
+    
+    const results = dataSource.filter(item => {
+      const itemName = activeFilter === 'Barangay' ? item.barangay_name : item.establishment_name;
+      const matchesName = filterName ? itemName.toLowerCase().includes(filterName.toLowerCase()) : true;
+      const matchesLocation = filterLocation ? item.city?.toLowerCase().includes(filterLocation.toLowerCase()) : true;
       const matchesDate = filterDate ? item.date === filterDate : true;
       return matchesName && matchesLocation && matchesDate;
     });
@@ -71,32 +111,38 @@ export default function PlacesScreen() {
     }
   };
 
-  const renderEstablishment = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.card} 
-      onPress={() => handleItemPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.iconCircle}>
-        <MaterialCommunityIcons 
-          name={getIcon(item.establishment_type)} 
-          size={26} 
-          color="#5B9A8B" 
-        />
-      </View>
-      
-      <View style={styles.infoContainer}>
-        <Text style={styles.establishmentName}>{item.establishment_name}</Text>
-        <Text style={styles.densityValue}>{item.density} Density • {item.temperature_c}°C</Text>
-      </View>
+  const renderItem = ({ item }) => {
+    const isBarangay = activeFilter === 'Barangay';
+    const name = isBarangay ? item.barangay_name : item.establishment_name;
+    const type = isBarangay ? item.city : item.establishment_type;
+    
+    return (
+      <TouchableOpacity 
+        style={styles.card} 
+        onPress={() => handleItemPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.iconCircle}>
+          <MaterialCommunityIcons 
+            name={isBarangay ? 'map-marker' : getIcon(item.establishment_type)} 
+            size={26} 
+            color={isBarangay ? '#FF6B6B' : '#5B9A8B'} 
+          />
+        </View>
+        
+        <View style={styles.infoContainer}>
+          <Text style={styles.establishmentName}>{name}</Text>
+          <Text style={styles.densityValue}>{item.density} {isBarangay ? 'Density' : 'Tons'} • {item.temperature_c}°C</Text>
+        </View>
 
-      <View style={styles.trendBadge}>
-        <Ionicons name="triangle" size={10} color="#ff0000" style={styles.trendIcon} />
-        <Text style={[styles.trendText, { color: '#ff0000' }]}>6%</Text>
-        <Feather name="arrow-up" size={16} color="#ff0000" />
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.trendBadge}>
+          <Ionicons name="triangle" size={10} color="#ff0000" style={styles.trendIcon} />
+          <Text style={[styles.trendText, { color: '#ff0000' }]}>6%</Text>
+          <Feather name="arrow-up" size={16} color="#ff0000" />
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const getIcon = (type) => {
     switch (type?.toLowerCase()) {
@@ -128,20 +174,63 @@ export default function PlacesScreen() {
       ) : (
         <FlatList
           data={filteredResults}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={renderEstablishment}
+          keyExtractor={(item, index) => `${activeFilter}-${item.barangay_id || item.establishment_id || index}`}
+          renderItem={renderItem}
           contentContainerStyle={styles.listPadding}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons 
+                name={activeFilter === 'Barangay' ? 'map-marker-off' : 'store-off'} 
+                size={64} 
+                color="#CCC" 
+              />
+              <Text style={styles.emptyText}>No {activeFilter.toLowerCase()}s found</Text>
+              <Text style={styles.emptySubtext}>Pull down to refresh</Text>
+            </View>
+          )}
           ListHeaderComponent={() => (
             <View>
               <Text style={styles.subHeaderText}>Top 20% Emission Contributors</Text>
+              
+              {/* Filter Toggle */}
               <View style={styles.filterRow}>
+                <TouchableOpacity 
+                  style={[
+                    styles.filterToggle, 
+                    activeFilter === 'Barangay' && styles.filterToggleActive
+                  ]}
+                  onPress={() => setActiveFilter('Barangay')}
+                >
+                  <Text style={[
+                    styles.filterToggleText,
+                    activeFilter === 'Barangay' && styles.filterToggleTextActive
+                  ]}>
+                    Barangay
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.filterToggle, 
+                    activeFilter === 'Establishment' && styles.filterToggleActive
+                  ]}
+                  onPress={() => setActiveFilter('Establishment')}
+                >
+                  <Text style={[
+                    styles.filterToggleText,
+                    activeFilter === 'Establishment' && styles.filterToggleTextActive
+                  ]}>
+                    Establishment
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.dateRow}>
                 <View style={styles.dateSelector}>
-                  <MaterialCommunityIcons name="leaf" size={16} color="#4CAF50" />
-                  <Text style={styles.filterText}> April 2024</Text>
-                </View>
-                <View style={styles.unitSelector}>
-                  <Text style={styles.filterText}>By CO₂e</Text>
+                  <MaterialCommunityIcons name="calendar" size={16} color="#FF6B6B" />
+                  <Text style={styles.filterText}> January 20, 2026</Text>
+                  <Feather name="chevron-down" size={16} color="#999" style={{ marginLeft: 5 }} />
                 </View>
               </View>
             </View>
@@ -167,12 +256,25 @@ export default function PlacesScreen() {
 
             {selectedItem && (
               <ScrollView showsVerticalScrollIndicator={false}>
-                <DetailRow label="Name" value={selectedItem.establishment_name} icon="business" />
-                <DetailRow label="Type" value={selectedItem.establishment_type} icon="layers" />
-                <DetailRow label="Latitude" value={selectedItem.latitude} icon="map" />
-                <DetailRow label="Longitude" value={selectedItem.longitude} icon="map" />
-                <DetailRow label="Density" value={`${selectedItem.density} Density`} icon="leaf" />
-                <DetailRow label="Temperature" value={`${selectedItem.temperature_c}°C`} icon="thermometer" />
+                {activeFilter === 'Barangay' ? (
+                  <>
+                    <DetailRow label="Barangay Name" value={selectedItem.barangay_name} icon="business" />
+                    <DetailRow label="City" value={selectedItem.city} icon="location" />
+                    <DetailRow label="Latitude" value={selectedItem.latitude} icon="map" />
+                    <DetailRow label="Longitude" value={selectedItem.longitude} icon="map" />
+                    <DetailRow label="Density" value={selectedItem.density} icon="people" />
+                    <DetailRow label="Temperature" value={`${selectedItem.temperature_c}°C`} icon="thermometer" />
+                  </>
+                ) : (
+                  <>
+                    <DetailRow label="Name" value={selectedItem.establishment_name} icon="business" />
+                    <DetailRow label="Type" value={selectedItem.establishment_type} icon="layers" />
+                    <DetailRow label="Latitude" value={selectedItem.latitude} icon="map" />
+                    <DetailRow label="Longitude" value={selectedItem.longitude} icon="map" />
+                    <DetailRow label="Density" value={`${selectedItem.density} Tons`} icon="leaf" />
+                    <DetailRow label="Temperature" value={`${selectedItem.temperature_c}°C`} icon="thermometer" />
+                  </>
+                )}
               </ScrollView>
             )}
           </View>
@@ -267,8 +369,30 @@ const styles = StyleSheet.create({
   downloadCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#EEE', justifyContent: 'center', alignItems: 'center' },
   listPadding: { paddingHorizontal: 20, paddingBottom: 20 },
   subHeaderText: { fontSize: 15, color: '#666', marginBottom: 15 },
-  filterRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  dateSelector: { flexDirection: 'row', backgroundColor: '#FFF', padding: 10, borderRadius: 12, alignItems: 'center', flex: 2, elevation: 1 },
+  filterRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
+  filterToggle: { 
+    flex: 1, 
+    backgroundColor: '#F0F0F0', 
+    padding: 12, 
+    borderRadius: 12, 
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0'
+  },
+  filterToggleActive: { 
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50'
+  },
+  filterToggleText: { 
+    color: '#666', 
+    fontWeight: '600',
+    fontSize: 13
+  },
+  filterToggleTextActive: { 
+    color: '#FFF'
+  },
+  dateRow: { marginBottom: 20 },
+  dateSelector: { flexDirection: 'row', backgroundColor: '#FFF', padding: 12, borderRadius: 12, alignItems: 'center', elevation: 1 },
   unitSelector: { backgroundColor: '#FFF', padding: 10, borderRadius: 12, alignItems: 'center', flex: 1, elevation: 1 },
   filterText: { color: '#555', fontWeight: '500' },
   card: { flexDirection: 'row', backgroundColor: '#FFF', padding: 15, borderRadius: 20, alignItems: 'center', marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
@@ -292,5 +416,24 @@ const styles = StyleSheet.create({
   // Filter Modal Inputs & Buttons
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, padding: 12, marginBottom: 15, fontSize: 14, backgroundColor: '#FAFAFA' },
   applyButton: { backgroundColor: '#4A665E', padding: 15, borderRadius: 15, alignItems: 'center', marginTop: 10 },
-  goBackButton: { padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#4A665E' }
+  goBackButton: { padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#4A665E' },
+  
+  // Empty State
+  emptyContainer: { 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: 60,
+    paddingHorizontal: 20
+  },
+  emptyText: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: '#999', 
+    marginTop: 15 
+  },
+  emptySubtext: { 
+    fontSize: 14, 
+    color: '#BBB', 
+    marginTop: 5 
+  }
 });

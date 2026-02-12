@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,7 +7,8 @@ import {
   StyleSheet, 
   SafeAreaView, 
   Platform,
-  StatusBar
+  StatusBar,
+  ActivityIndicator
 } from 'react-native';
 import { 
   ArrowLeft, 
@@ -18,17 +19,109 @@ import {
   ClipboardList, 
   Users, 
   Calendar,
-  MoveUp
+  MoveUp,
+  MoveDown
 } from 'lucide-react-native';
 
 const Dashboard = () => {
-  const barangayData = [
-    { rank: 1, name: 'San Francisco', value: 265, color: '#ef4444', width: '90%' },
-    { rank: 2, name: 'Villanueva Ave.', value: 255, color: '#f97316', width: '85%' },
-    { rank: 3, name: 'Dayangdang', value: 250, color: '#fdba74', width: '83%' },
-    { rank: 4, name: 'Tabuco', value: 195, color: '#facc15', width: '65%' },
-    { rank: 5, name: 'Villanueva Ave.', value: 190, color: '#4ade80', width: '60%' },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+  const [selectedDate, setSelectedDate] = useState('January 2026');
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      // Replace with your actual API endpoint
+      const response = await fetch('https://bytetech-final1.onrender.com/dashboard');
+      const result = await response.json();
+      setData(result);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      // Fallback to mock data for development
+      setData({
+        heatStressCases: 0,
+        totalEmission: 450.5,
+        inspectionDropPercent: "0.0000",
+        totalUsers: 1,
+        topBarangays: [
+          { barangay_name: "Abella", total_emission: 450.5 }
+        ],
+        monthlyCO2Comparison: [
+          { month_number: 2, month: "Feb", total: 450.5 }
+        ]
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to get color based on rank
+  const getColorForRank = (rank) => {
+    const colors = ['#ef4444', '#f97316', '#fdba74', '#facc15', '#4ade80'];
+    return colors[rank - 1] || '#94a3b8';
+  };
+
+  // Function to calculate progress bar width
+  const getProgressWidth = (emission, maxEmission) => {
+    const percentage = (emission / maxEmission) * 100;
+    return `${Math.min(percentage, 100)}%`;
+  };
+
+  // Calculate comparison with previous month
+  const getMonthComparison = () => {
+    if (!data?.monthlyCO2Comparison || data.monthlyCO2Comparison.length < 2) {
+      return { percent: 0, isIncrease: false };
+    }
+    
+    const currentMonth = data.monthlyCO2Comparison[data.monthlyCO2Comparison.length - 1];
+    const previousMonth = data.monthlyCO2Comparison[data.monthlyCO2Comparison.length - 2];
+    
+    if (!previousMonth || previousMonth.total === 0) {
+      return { percent: 0, isIncrease: false };
+    }
+    
+    const percent = ((currentMonth.total - previousMonth.total) / previousMonth.total) * 100;
+    return { 
+      percent: Math.abs(percent).toFixed(1), 
+      isIncrease: percent > 0,
+      previousMonth: previousMonth.month
+    };
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={styles.loadingText}>Loading dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!data) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.container, styles.centerContent]}>
+          <Text style={styles.errorText}>Failed to load data</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchDashboardData}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const maxEmission = data.topBarangays.length > 0 
+    ? Math.max(...data.topBarangays.map(b => b.total_emission))
+    : 1;
+
+  const comparison = getMonthComparison();
+  const inspectionDrop = parseFloat(data.inspectionDropPercent).toFixed(1);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -52,7 +145,7 @@ const Dashboard = () => {
 
         {/* Date Selector */}
         <TouchableOpacity style={styles.dateSelector}>
-          <Text style={styles.dateText}>January 2026</Text>
+          <Text style={styles.dateText}>{selectedDate}</Text>
           <ChevronDown color="#6b7280" size={20} />
         </TouchableOpacity>
 
@@ -67,7 +160,7 @@ const Dashboard = () => {
                 <Thermometer color="#ef4444" size={20} />
               </View>
               <View>
-                <Text style={styles.metricValue}>670</Text>
+                <Text style={styles.metricValue}>{data.heatStressCases}</Text>
                 <Text style={styles.metricLabel}>Heat Stress Cases</Text>
               </View>
             </View>
@@ -78,7 +171,7 @@ const Dashboard = () => {
                 <ClipboardList color="#1e40af" size={20} />
               </View>
               <View>
-                <Text style={styles.metricValue}>45%</Text>
+                <Text style={styles.metricValue}>{inspectionDrop}%</Text>
                 <Text style={styles.metricLabel}>Inspection Drop</Text>
               </View>
             </View>
@@ -92,8 +185,8 @@ const Dashboard = () => {
                 <CloudFog color="#fb923c" size={20} />
               </View>
               <View>
-                <Text style={styles.metricValue}>120</Text>
-                <Text style={styles.metricLabel}>Emission Tons (Top 20%)</Text>
+                <Text style={styles.metricValue}>{data.totalEmission.toFixed(1)}</Text>
+                <Text style={styles.metricLabel}>Total Emission Tons</Text>
               </View>
             </View>
 
@@ -103,7 +196,7 @@ const Dashboard = () => {
                 <Users color="#16a34a" size={20} />
               </View>
               <View>
-                <Text style={styles.metricValue}>8932</Text>
+                <Text style={styles.metricValue}>{data.totalUsers.toLocaleString()}</Text>
                 <Text style={styles.metricLabel}>Users</Text>
               </View>
             </View>
@@ -113,62 +206,99 @@ const Dashboard = () => {
 
         {/* Top Barangays List */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Top 5 Barangays by Carbon Emission</Text>
-          <View style={styles.listContainer}>
-            {barangayData.map((item, index) => (
-              <View key={index} style={styles.listItem}>
-                <View style={[
-                  styles.rankBadge, 
-                  { backgroundColor: item.rank <= 3 ? item.color : 'transparent' }
-                ]}>
-                  <Text style={[
-                    styles.rankText,
-                    { color: item.rank > 3 ? '#4b5563' : '#fff' }
-                  ]}>{item.rank}</Text>
-                </View>
+          <Text style={styles.sectionTitle}>Top {data.topBarangays.length} Barangays by Carbon Emission</Text>
+          
+          {data.topBarangays.length > 0 ? (
+            <View style={styles.listContainer}>
+              {data.topBarangays.map((item, index) => {
+                const rank = index + 1;
+                const color = getColorForRank(rank);
+                const width = getProgressWidth(item.total_emission, maxEmission);
                 
-                <View style={styles.progressContainer}>
-                   <View style={styles.progressLabelRow}>
-                      <Text style={styles.barangayName}>{item.name}</Text>
-                      <Text style={styles.barangayValue}>{item.value} Tons</Text>
-                   </View>
-                   <View style={styles.progressBarBackground}>
-                      <View 
-                        style={[
-                          styles.progressBarFill, 
-                          { backgroundColor: item.color, width: item.width }
-                        ]} 
-                      />
-                   </View>
-                </View>
-              </View>
-            ))}
-          </View>
+                return (
+                  <View key={index} style={styles.listItem}>
+                    <View style={[
+                      styles.rankBadge, 
+                      { backgroundColor: rank <= 3 ? color : 'transparent' }
+                    ]}>
+                      <Text style={[
+                        styles.rankText,
+                        { color: rank > 3 ? '#4b5563' : '#fff' }
+                      ]}>{rank}</Text>
+                    </View>
+                    
+                    <View style={styles.progressContainer}>
+                      <View style={styles.progressLabelRow}>
+                        <Text style={styles.barangayName}>{item.barangay_name}</Text>
+                        <Text style={styles.barangayValue}>{item.total_emission.toFixed(1)} Tons</Text>
+                      </View>
+                      <View style={styles.progressBarBackground}>
+                        <View 
+                          style={[
+                            styles.progressBarFill, 
+                            { backgroundColor: color, width: width }
+                          ]} 
+                        />
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.noDataText}>No barangay data available</Text>
+          )}
         </View>
 
         {/* Footer Summary */}
         <View style={styles.footerContainer}>
           <View style={styles.footerHeader}>
             <Calendar color="#6b7280" size={20} />
-            <Text style={styles.footerDate}>January 2026</Text>
+            <Text style={styles.footerDate}>{selectedDate}</Text>
           </View>
           
           <View style={styles.totalRow}>
-             <View style={styles.totalValueContainer}>
-                <View style={styles.arrowIconBox}>
-                  <MoveUp color="#22c55e" size={24} strokeWidth={3} />
-                </View>
-                <Text style={styles.totalValueText}>350</Text>
-             </View>
-             <Text style={styles.totalLabelText}>Tons Total CO2</Text>
+            <View style={styles.totalValueContainer}>
+              <View style={[
+                styles.arrowIconBox,
+                { backgroundColor: comparison.isIncrease ? '#fee2e2' : '#dcfce7' }
+              ]}>
+                {comparison.isIncrease ? (
+                  <MoveUp color="#ef4444" size={24} strokeWidth={3} />
+                ) : (
+                  <MoveDown color="#22c55e" size={24} strokeWidth={3} />
+                )}
+              </View>
+              <Text style={[
+                styles.totalValueText,
+                { color: comparison.isIncrease ? '#ef4444' : '#22c55e' }
+              ]}>
+                {data.totalEmission.toFixed(1)}
+              </Text>
+            </View>
+            <Text style={[
+              styles.totalLabelText,
+              { color: comparison.isIncrease ? '#ef4444' : '#22c55e' }
+            ]}>
+              Tons Total CO2
+            </Text>
           </View>
 
-          <View style={styles.comparisonRow}>
-             <View style={styles.comparisonBadge}>
-               <Text style={styles.comparisonText}>→ 1%</Text>
-             </View>
-             <Text style={styles.comparisonLabel}>Compared to December 2025</Text>
-          </View>
+          {comparison.previousMonth && (
+            <View style={styles.comparisonRow}>
+              <View style={styles.comparisonBadge}>
+                <Text style={[
+                  styles.comparisonText,
+                  { color: comparison.isIncrease ? '#dc2626' : '#16a34a' }
+                ]}>
+                  {comparison.isIncrease ? '↑' : '↓'} {comparison.percent}%
+                </Text>
+              </View>
+              <Text style={styles.comparisonLabel}>
+                Compared to {comparison.previousMonth}
+              </Text>
+            </View>
+          )}
         </View>
 
       </ScrollView>
@@ -180,6 +310,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6', 
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ef4444',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   statusBarPlaceholder: {
     height: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
@@ -366,7 +527,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   arrowIconBox: {
-    backgroundColor: '#dcfce7',
     padding: 4,
     borderRadius: 4,
     marginRight: 4,
@@ -374,12 +534,10 @@ const styles = StyleSheet.create({
   totalValueText: {
     fontSize: 30,
     fontWeight: 'bold',
-    color: '#22c55e',
   },
   totalLabelText: {
     fontSize: 18,
     fontWeight: '500',
-    color: '#22c55e',
     marginBottom: 4,
     marginLeft: 8,
   },
@@ -396,7 +554,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   comparisonText: {
-    color: '#16a34a',
     fontSize: 12,
     fontWeight: 'bold',
   },
