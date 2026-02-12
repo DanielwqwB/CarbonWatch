@@ -261,12 +261,6 @@ npm install react-native-chart-kit --save
 - Enhanced AI prediction models
 - Social sharing features
 
-### Version 2.1
-- AR visualization for facility emissions
-- Voice-controlled navigation
-- Automated report scheduling
-- API for third-party integrations
-
 ---
 
 Made with 💚 for a sustainable future
