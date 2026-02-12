@@ -35,25 +35,18 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      // Replace with your actual API endpoint
       const response = await fetch('https://bytetech-final1.onrender.com/dashboard');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const result = await response.json();
       setData(result);
+      console.log('Dashboard data loaded:', result);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      // Fallback to mock data for development
-      setData({
-        heatStressCases: 0,
-        totalEmission: 450.5,
-        inspectionDropPercent: "0.0000",
-        totalUsers: 1,
-        topBarangays: [
-          { barangay_name: "Abella", total_emission: 450.5 }
-        ],
-        monthlyCO2Comparison: [
-          { month_number: 2, month: "Feb", total: 450.5 }
-        ]
-      });
+      setData(null); // Set to null to show error state
     } finally {
       setLoading(false);
     }
