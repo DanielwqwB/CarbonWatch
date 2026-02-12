@@ -12,7 +12,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 
-const API_URL = '${API_URL}/reports';
+const API_URL = '';
 const screenWidth = Dimensions.get('window').width;
 
 // --- MOCK DATA FOR VISUALS ---
@@ -23,10 +23,18 @@ const MONTHLY_DATA = {
   }]
 };
 
+const WEEKLY_DATA = {
+  labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+  datasets: [{
+    data: [55, 62, 58, 75]
+  }]
+};
+
 export default function Reports({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [establishments, setEstablishments] = useState([]);
+  const [reportType, setReportType] = useState('monthly'); // 'monthly' or 'weekly'
   const [selectedMonth, setSelectedMonth] = useState('December 2026');
   const [carbonStats, setCarbonStats] = useState({
     red: 0,
@@ -68,6 +76,11 @@ export default function Reports({ navigation }) {
     fetchReports();
   };
 
+  const chartData = reportType === 'monthly' ? MONTHLY_DATA : WEEKLY_DATA;
+  const totalEmission = reportType === 'monthly' ? '300 Tons' : '75 Tons';
+  const targetPercentage = reportType === 'monthly' ? '80% of 375 Tons' : '75% of 100 Tons';
+  const trendValue = reportType === 'monthly' ? '5% vs. Last Month' : '8% vs. Last Week';
+
   // --- MAIN SCREEN ---
   if (loading) {
     return (
@@ -94,11 +107,46 @@ export default function Reports({ navigation }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {/* TOGGLE BUTTONS - Monthly/Weekly */}
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              reportType === 'monthly' && styles.toggleButtonActive
+            ]}
+            onPress={() => setReportType('monthly')}
+          >
+            <Text style={[
+              styles.toggleText,
+              reportType === 'monthly' && styles.toggleTextActive
+            ]}>
+              Monthly Report
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              reportType === 'weekly' && styles.toggleButtonActive
+            ]}
+            onPress={() => setReportType('weekly')}
+          >
+            <Text style={[
+              styles.toggleText,
+              reportType === 'weekly' && styles.toggleTextActive
+            ]}>
+              Weekly Report
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* DATE SELECTOR */}
         <View style={styles.dateCard}>
           <View style={styles.rowCenter}>
             <MaterialCommunityIcons name="calendar-month" size={20} color="#4CAF50" />
-            <Text style={styles.dateText}>{selectedMonth}</Text>
+            <Text style={styles.dateText}>
+              {reportType === 'monthly' ? selectedMonth : 'January 21 - 27, 2026'}
+            </Text>
           </View>
           <Ionicons name="chevron-down" size={20} color="#777" />
         </View>
@@ -118,11 +166,11 @@ export default function Reports({ navigation }) {
             </View>
 
             <View style={styles.statsContainer}>
-              <Text style={styles.bigNumber}>300 Tons</Text>
-              <Text style={styles.unitText}>80% of 375 Tons</Text>
+              <Text style={styles.bigNumber}>{totalEmission}</Text>
+              <Text style={styles.unitText}>{targetPercentage}</Text>
               <View style={styles.trendRow}>
                 <MaterialCommunityIcons name="triangle" size={12} color="#D32F2F" />
-                <Text style={styles.trendText}>5% vs. Last Month</Text>
+                <Text style={styles.trendText}>{trendValue}</Text>
               </View>
             </View>
           </View>
@@ -168,17 +216,19 @@ export default function Reports({ navigation }) {
           </View>
         </View>
 
-        {/* 2. CITY-WIDE MONTHLY CHART */}
+        {/* 2. CITY-WIDE CHART */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.rowBetween}>
-              <Text style={styles.cardTitle}>City-wide Monthly, CO2 Emission</Text>
+              <Text style={styles.cardTitle}>
+                City-wide {reportType === 'monthly' ? 'Monthly' : 'Weekly'}, CO₂ Emission
+              </Text>
             </View>
           </View>
 
           <View style={styles.chartContainer}>
             <BarChart
-              data={MONTHLY_DATA}
+              data={chartData}
               width={screenWidth - 64}
               height={200}
               yAxisSuffix="T"
@@ -208,11 +258,15 @@ export default function Reports({ navigation }) {
           <View style={styles.chartLegend}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
-              <Text style={styles.legendText}>Target (250T)</Text>
+              <Text style={styles.legendText}>
+                Target ({reportType === 'monthly' ? '250T' : '65T'})
+              </Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#FF9800' }]} />
-              <Text style={styles.legendText}>Limit (350T)</Text>
+              <Text style={styles.legendText}>
+                Limit ({reportType === 'monthly' ? '350T' : '90T'})
+              </Text>
             </View>
           </View>
         </View>
@@ -268,6 +322,34 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#111'
+  },
+
+  /* Toggle Buttons */
+  toggleContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 16,
+    gap: 8,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#E8E8E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#4CAF50',
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  toggleTextActive: {
+    color: '#FFFFFF',
   },
 
   /* Date Card */
