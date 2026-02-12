@@ -3,10 +3,10 @@ const router = express.Router();
 const establishmentController = require('../controllers/establishmentController');
 
 // Routes
-router.get('/', establishmentController.getAllEstablishments);          // GET all
-router.get('/:id', establishmentController.getEstablishmentById);      // GET by ID
-router.post('/create/establishment', establishmentController.createEstablishment);          // CREATE
-router.put('/:id', establishmentController.updateEstablishment);       // UPDATE
-router.delete('/:id', establishmentController.deleteEstablishment);    // DELETE
+router.get('/establishment', establishmentController.getAllEstablishments);          // GET establishment/
+router.get('/establishment/:id', establishmentController.getEstablishmentById);      // GET by ID establishment/1
+router.post('/create/establishment', establishmentController.createEstablishment); // CREATE establishment/create
+router.put('/establihsment/:id', establishmentController.updateEstablishment);       // UPDATE    establishment/1
+router.delete('/establishment/:id', establishmentController.deleteEstablishment);    // DELETE establishment/1
 
 module.exports = router;

@@ -1,12 +1,11 @@
-// controllers/barangayController.js
 const pool = require('../config/database');
 
 // Get all barangays
 const getAllBarangays = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT barangay_id, name, latitude, longitude, city, density, temperature_c
-       FROM barangays
+      `SELECT barangay_id, barangay_name, latitude, longitude, city, density, temperature_c
+       FROM barangay
        ORDER BY barangay_id ASC`
     );
 
@@ -15,10 +14,10 @@ const getAllBarangays = async (req, res) => {
       data: rows
     });
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('Database error full:', error);
     res.status(500).json({
       error: 'Database error',
-      details: error.message
+      details: error.sqlMessage || error.message || JSON.stringify(error)
     });
   }
 };
@@ -29,8 +28,8 @@ const getBarangayById = async (req, res) => {
 
   try {
     const [rows] = await pool.query(
-      `SELECT barangay_id, name, latitude, longitude, city, density, temperature_c
-       FROM barangays
+      `SELECT barangay_id, barangay_name, latitude, longitude, city, density, temperature_c
+       FROM barangay
        WHERE barangay_id = ?`,
       [id]
     );
@@ -44,10 +43,10 @@ const getBarangayById = async (req, res) => {
       data: rows[0]
     });
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('Database error full:', error);
     res.status(500).json({
       error: 'Database error',
-      details: error.message
+      details: error.sqlMessage || error.message || JSON.stringify(error)
     });
   }
 };

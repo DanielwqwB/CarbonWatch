@@ -1,17 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const sensorController = require('../controllers/sensorDataController');
 
-// ESP32 sends data
-router.post('/post-sensor-data', sensorController.postSensorData);
+const sensorDataController = require('../controllers/sensorDataController');
 
-// ✅ GET ALL SENSOR DATA (THIS FIXES 404)
-router.get('/sensor-data', sensorController.getAllSensorData);
+// POST sensor data
+router.post('/create/sensor-data', sensorDataController.createSensorData);
 
-// Get latest reading per sensor
-router.get('/sensor-data/latest/:sensor_id', sensorController.getLatestSensorData);
-
-// Get all readings for one sensor
-router.get('/sensor-data/:sensor_id', sensorController.getSensorData);
+// GET sensor data
+router.get('/sensor-data', sensorDataController.getAllSensorData);
 
 module.exports = router;
