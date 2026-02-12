@@ -219,14 +219,14 @@ npm install react-native-chart-kit --save
 - Check network connectivity
 - Review CORS settings on backend
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 👥 Authors
 
-- **Your Name** - *Initial work* - [YourGithub](https://github.com/yourusername)
-
+- Galvez JR.
+- Bonito D.
+- Cambiado JP.
+- Sanota JR.
+- Nodado RL.
+  
 ## 🙏 Acknowledgments
 
 - React Native community for excellent documentation
