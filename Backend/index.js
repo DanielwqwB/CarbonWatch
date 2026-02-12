@@ -11,7 +11,7 @@ app.use(bodyParser.json());
 // MySQL connection
 // ========================
 const db = mysql.createConnection({
-    host: 'mmysql-360d30a7-gbox-6009.a.aivencloud.com',
+    host: 'mysql-360d30a7-gbox-6009.a.aivencloud.com',
     user: 'avnadmin',
     password: 'AVNS_xRg_1Ymj9oje4V_wSeq',
     database: 'defaultdb',
@@ -42,33 +42,21 @@ function getCarbonLevel(co2) {
 // ========================
 function calculateHeatIndex(temperature_c, humidity) {
     if (temperature_c === undefined || humidity === undefined) return null;
-    // simple approximation formula
     const T = temperature_c;
     const R = humidity;
-    const HI = 0.5 * (T + 61.0 + ((T-68.0)*1.2) + (R*0.094));
+    const HI = 0.5 * (T + 61.0 + ((T - 68.0) * 1.2) + (R * 0.094));
     return parseFloat(HI.toFixed(2));
 }
 
 // ========================
 // POST: Insert sensor data
 // ========================
-app.post('/sensor-data', (req, res) => {
-    const {
-        sensor_id,
-        co2_density = null,
-        temperature_c = null,
-        humidity = null
-    } = req.body;
+app.post('/create/sensor-data', (req, res) => {
+    const { sensor_id, co2_density, temperature_c, humidity, heat_index_c, carbon_level } = req.body;
 
-    // Validate required field
-    if (!sensor_id) {
-        return res.status(400).json({ 
-            error: 'Missing required field: sensor_id' 
-        });
+    if (sensor_id === undefined || temperature_c === undefined || co2_density === undefined) {
+        return res.status(400).json({ error: 'Missing required fields' });
     }
-
-    const heat_index_c = calculateHeatIndex(temperature_c, humidity);
-    const carbon_level = getCarbonLevel(co2_density);
 
     const sql = `
         INSERT INTO sensor_data
@@ -76,29 +64,24 @@ app.post('/sensor-data', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    const values = [
-        sensor_id,
-        co2_density,
-        temperature_c,
-        humidity,
-        heat_index_c,
-        carbon_level
-    ];
-
-    db.query(sql, values, (err, result) => {
+    db.query(sql, [sensor_id, co2_density, temperature_c, humidity, heat_index_c, carbon_level], (err, result) => {
         if (err) {
-            console.error('DB Insert Error:', err);
-            return res.status(500).json({ error: 'Database error', details: err.message });
+            console.error(err);
+            return res.status(500).json({ error: 'Database error' });
         }
-        res.status(201).json({ success: true, data_id: result.insertId });
+
+        res.status(201).json({
+            success: true,
+            data_id: result.insertId
+        });
     });
 });
 
 // ========================
 // GET: Latest sensor data for a sensor
 // ========================
-app.get('/sensor-data/latest/:sensor_id', (req, res) => {
-    const { sensor_id } = req.params;
+app.get('/sensor-data', (req, res) => {
+    const { sensor_id } = req.query; // <-- use query parameter
 
     if (!sensor_id) return res.status(400).json({ error: 'sensor_id is required' });
 
