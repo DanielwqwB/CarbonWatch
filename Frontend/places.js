@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
-// Store previous values in memory
+// Store previous values in memory (persists across re-renders)
 const previousValues = {};
 
 export default function PlacesScreen() {
@@ -36,12 +36,17 @@ export default function PlacesScreen() {
 
   const calculatePercentageChange = (current, previous) => {
     if (!previous || previous === 0) return 0;
-    return (((current - previous) / previous) * 100).toFixed(1);
+    const change = (((current - previous) / previous) * 100).toFixed(1);
+    return parseFloat(change);
   };
 
-  const fetchAllData = async () => {
+  const fetchAllData = async (isInitialLoad = false) => {
     try {
-      setLoading(true);
+      if (isInitialLoad) {
+        setLoading(true);
+      }
+      
+      console.log('🔄 Fetching data at:', new Date().toLocaleTimeString());
       
       const [estResponse, brgyResponse] = await Promise.all([
         fetch(ESTABLISHMENT_API),
@@ -51,55 +56,72 @@ export default function PlacesScreen() {
       const estData = await estResponse.json();
       const brgyData = await brgyResponse.json();
       
-      console.log('Establishment Data:', estData);
-      console.log('Barangay Data:', brgyData);
-      
       // Handle both array and object responses
       const establishments = Array.isArray(estData) ? estData : (estData.data || []);
       const barangays = Array.isArray(brgyData) ? brgyData : (brgyData.data || []);
       
-      console.log('Processed Establishments:', establishments);
-      console.log('Processed Barangays:', barangays);
+      console.log('✅ Fetched:', establishments.length, 'establishments,', barangays.length, 'barangays');
       
-      console.log('=== PREVIOUS VALUES (Before Update) ===');
-      console.log(previousValues);
-      
-      // Calculate percentage changes (comparing with stored previous values)
+      // Calculate percentage changes
       const changes = {};
       
       // For establishments
       establishments.forEach(est => {
         const key = `est-${est.establishment_id}`;
+        const currentValue = parseFloat(est.avg_co2_density);
+        
         if (previousValues[key]) {
-          changes[key] = calculatePercentageChange(est.avg_co2_density, previousValues[key].avg_co2_density);
+          // Calculate real change from previous value
+          const previousValue = previousValues[key].value;
+          changes[key] = calculatePercentageChange(currentValue, previousValue);
+          
+          console.log(`📊 ${est.establishment_name}:`, {
+            previous: previousValue,
+            current: currentValue,
+            change: changes[key] + '%'
+          });
         } else {
-          // First load: simulate a small increase (3-8%) for demo purposes
-          // This makes percentages visible immediately
-          const simulatedPrevious = est.avg_co2_density * (1 - (Math.random() * 0.05 + 0.03));
-          changes[key] = calculatePercentageChange(est.avg_co2_density, simulatedPrevious);
+          // First time - no previous data yet, show 0%
+          changes[key] = 0;
+          console.log(`🆕 ${est.establishment_name}: First load, setting baseline`);
         }
+        
         // Store current value for next comparison
-        previousValues[key] = { avg_co2_density: est.avg_co2_density };
+        previousValues[key] = { 
+          value: currentValue,
+          timestamp: Date.now()
+        };
       });
       
       // For barangays
       barangays.forEach(brgy => {
         const key = `brgy-${brgy.barangay_id}`;
+        const currentValue = parseFloat(brgy.density);
+        
         if (previousValues[key]) {
-          changes[key] = calculatePercentageChange(brgy.density, previousValues[key].density);
+          // Calculate real change from previous value
+          const previousValue = previousValues[key].value;
+          changes[key] = calculatePercentageChange(currentValue, previousValue);
+          
+          console.log(`📊 Barangay ${brgy.barangay_name}:`, {
+            previous: previousValue,
+            current: currentValue,
+            change: changes[key] + '%'
+          });
         } else {
-          // First load: simulate a small increase (3-8%) for demo purposes
-          const simulatedPrevious = brgy.density * (1 - (Math.random() * 0.05 + 0.03));
-          changes[key] = calculatePercentageChange(brgy.density, simulatedPrevious);
+          // First time - no previous data yet, show 0%
+          changes[key] = 0;
+          console.log(`🆕 Barangay ${brgy.barangay_name}: First load, setting baseline`);
         }
+        
         // Store current value for next comparison
-        previousValues[key] = { density: brgy.density };
+        previousValues[key] = { 
+          value: currentValue,
+          timestamp: Date.now()
+        };
       });
       
-      console.log('=== PERCENTAGE CHANGES CALCULATED ===');
-      console.log(changes);
-      console.log('=== UPDATED PREVIOUS VALUES (After Update) ===');
-      console.log(previousValues);
+      console.log('📦 Total tracked items:', Object.keys(previousValues).length);
       
       setPercentageChanges(changes);
       setEstablishments(establishments);
@@ -112,7 +134,7 @@ export default function PlacesScreen() {
         setFilteredResults(establishments);
       }
     } catch (error) {
-      console.error("Fetch error:", error);
+      console.error("❌ Fetch error:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -120,22 +142,32 @@ export default function PlacesScreen() {
   };
 
   useEffect(() => {
-    fetchAllData();
-    // Refresh every 30 seconds to update percentages
-    const interval = setInterval(fetchAllData, 120000);
-    return () => clearInterval(interval);
+    // Initial load
+    fetchAllData(true);
+    
+    // Auto-refresh every 2 minutes (120000ms = 2 minutes)
+    // Change to 30000 for 30 seconds if you want faster updates for testing
+    const interval = setInterval(() => {
+      console.log('⏰ Auto-refresh triggered');
+      fetchAllData(false);
+    }, 1800000);
+    
+    return () => {
+      console.log('🧹 Cleaning up interval');
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
     // Update filtered results when filter changes
     const newData = activeFilter === 'Barangay' ? barangays : establishments;
-    console.log(`Filter changed to ${activeFilter}, setting data:`, newData);
     setFilteredResults(newData);
   }, [activeFilter, barangays, establishments]);
 
   const onRefresh = () => {
+    console.log('👆 Manual refresh');
     setRefreshing(true);
-    fetchAllData();
+    fetchAllData(false);
   };
 
   // Detail modal
@@ -175,9 +207,10 @@ export default function PlacesScreen() {
     
     // Get percentage change
     const key = isBarangay ? `brgy-${item.barangay_id}` : `est-${item.establishment_id}`;
-    const percentChange = parseFloat(percentageChanges[key]) || 0;
+    const percentChange = percentageChanges[key] || 0;
     const isIncrease = percentChange > 0;
     const isDecrease = percentChange < 0;
+    const isNoChange = percentChange === 0;
     
     return (
       <TouchableOpacity 
@@ -195,25 +228,36 @@ export default function PlacesScreen() {
         
         <View style={styles.infoContainer}>
           <Text style={styles.establishmentName}>{name}</Text>
-          <Text style={styles.densityValue}>{density} {isBarangay ? 'Density' : 'Tons'} • {temperature}°C</Text>
+          <Text style={styles.densityValue}>
+            {density?.toFixed(2)} {isBarangay ? 'Density' : 'Tons'} • {temperature}°C
+          </Text>
         </View>
 
-        <View style={styles.trendBadge}>
-          <Ionicons 
-            name="triangle" 
-            size={10} 
-            color={isIncrease ? '#ff0000' : '#00c853'} 
-            style={[styles.trendIcon, isDecrease && { transform: [{ rotate: '180deg' }] }]} 
-          />
-          <Text style={[styles.trendText, { color: isIncrease ? '#ff0000' : '#00c853' }]}>
-            {Math.abs(percentChange)}%
-          </Text>
-          <Feather 
-            name={isIncrease ? 'arrow-up' : 'arrow-down'} 
-            size={16} 
-            color={isIncrease ? '#ff0000' : '#00c853'} 
-          />
-        </View>
+        {!isNoChange && (
+          <View style={styles.trendBadge}>
+            <Ionicons 
+              name="triangle" 
+              size={10} 
+              color={isIncrease ? '#ff0000' : '#00c853'} 
+              style={[styles.trendIcon, isDecrease && { transform: [{ rotate: '180deg' }] }]} 
+            />
+            <Text style={[styles.trendText, { color: isIncrease ? '#ff0000' : '#00c853' }]}>
+              {Math.abs(percentChange)}%
+            </Text>
+            <Feather 
+              name={isIncrease ? 'arrow-up' : 'arrow-down'} 
+              size={16} 
+              color={isIncrease ? '#ff0000' : '#00c853'} 
+            />
+          </View>
+        )}
+        
+        {isNoChange && (
+          <View style={styles.trendBadge}>
+            <Ionicons name="remove" size={16} color="#999" />
+            <Text style={[styles.trendText, { color: '#999' }]}>0%</Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -275,7 +319,9 @@ export default function PlacesScreen() {
           )}
           ListHeaderComponent={() => (
             <View>
-              <Text style={styles.subHeaderText}>Top 20% Emission Contributors</Text>
+              <Text style={styles.subHeaderText}>
+                Top 20% Emission Contributors • Updates every 30 min
+              </Text>
               
               {/* Filter Toggle */}
               <View style={styles.filterRow}>

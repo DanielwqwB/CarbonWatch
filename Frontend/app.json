@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "",
-    "slug": "",
+    "name": "CarbonWatch",
+    "slug": "CarbonWatch",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/Final.png",
@@ -25,6 +25,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "58b952f1-3185-451c-9179-d90057196a13"
+      }
     }
   }
 }
