@@ -116,6 +116,10 @@ export default function PlacesScreen() {
     const name = isBarangay ? item.barangay_name : item.establishment_name;
     const type = isBarangay ? item.city : item.establishment_type;
     
+    // Handle different field names from API
+    const density = item.density || item.avg_co2_density;
+    const temperature = item.temperature_c || item.avg_temperature_c;
+    
     return (
       <TouchableOpacity 
         style={styles.card} 
@@ -132,7 +136,7 @@ export default function PlacesScreen() {
         
         <View style={styles.infoContainer}>
           <Text style={styles.establishmentName}>{name}</Text>
-          <Text style={styles.densityValue}>{item.density} {isBarangay ? 'Density' : 'Tons'} • {item.temperature_c}°C</Text>
+          <Text style={styles.densityValue}>{density} {isBarangay ? 'Density' : 'Tons'} • {temperature}°C</Text>
         </View>
 
         <View style={styles.trendBadge}>
@@ -148,6 +152,7 @@ export default function PlacesScreen() {
     switch (type?.toLowerCase()) {
       case 'hardware': return 'tools';
       case 'mall': return 'shopping';
+      case 'restaurant': return 'food';
       default: return 'store-outline';
     }
   };
@@ -174,7 +179,14 @@ export default function PlacesScreen() {
       ) : (
         <FlatList
           data={filteredResults}
-          keyExtractor={(item, index) => `${activeFilter}-${item.barangay_id || item.establishment_id || index}`}
+          keyExtractor={(item, index) => {
+            // Use the correct ID field based on filter type
+            if (activeFilter === 'Barangay') {
+              return `barangay-${item.barangay_id || index}`;
+            } else {
+              return `establishment-${item.establishment_id || index}`;
+            }
+          }}
           renderItem={renderItem}
           contentContainerStyle={styles.listPadding}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -262,17 +274,18 @@ export default function PlacesScreen() {
                     <DetailRow label="City" value={selectedItem.city} icon="location" />
                     <DetailRow label="Latitude" value={selectedItem.latitude} icon="map" />
                     <DetailRow label="Longitude" value={selectedItem.longitude} icon="map" />
-                    <DetailRow label="Density" value={selectedItem.density} icon="people" />
-                    <DetailRow label="Temperature" value={`${selectedItem.temperature_c}°C`} icon="thermometer" />
+                    <DetailRow label="Density" value={selectedItem.density || selectedItem.avg_co2_density} icon="people" />
+                    <DetailRow label="Temperature" value={`${selectedItem.temperature_c || selectedItem.avg_temperature_c}°C`} icon="thermometer" />
                   </>
                 ) : (
                   <>
                     <DetailRow label="Name" value={selectedItem.establishment_name} icon="business" />
                     <DetailRow label="Type" value={selectedItem.establishment_type} icon="layers" />
+                    <DetailRow label="Barangay" value={selectedItem.barangay_name} icon="location" />
                     <DetailRow label="Latitude" value={selectedItem.latitude} icon="map" />
                     <DetailRow label="Longitude" value={selectedItem.longitude} icon="map" />
-                    <DetailRow label="Density" value={`${selectedItem.density} Tons`} icon="leaf" />
-                    <DetailRow label="Temperature" value={`${selectedItem.temperature_c}°C`} icon="thermometer" />
+                    <DetailRow label="CO2 Density" value={`${selectedItem.avg_co2_density || selectedItem.density} Tons`} icon="leaf" />
+                    <DetailRow label="Temperature" value={`${selectedItem.avg_temperature_c || selectedItem.temperature_c}°C`} icon="thermometer" />
                   </>
                 )}
               </ScrollView>

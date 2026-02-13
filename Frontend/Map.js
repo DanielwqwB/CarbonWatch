@@ -203,20 +203,28 @@ const MapScreen = () => {
         <View style={styles.cardOverlay}>
           <View style={[styles.infoCard, { borderLeftWidth: 5, borderLeftColor: '#5B9A8B' }]}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                <Text style={styles.brgyName}>{selectedEst.establishment_name}</Text>
-                <View style={styles.typeBadge}><Text style={styles.typeText}>{selectedEst.establishment_type}</Text></View>
+                <Text style={styles.brgyName}>{selectedEst.establishment_name || 'Unknown'}</Text>
+                <View style={styles.typeBadge}>
+                  <Text style={styles.typeText}>{selectedEst.establishment_type || 'N/A'}</Text>
+                </View>
             </View>
+            <Text style={styles.cityName}>{selectedEst.barangay_name || 'Naga City'}</Text>
             <View style={[styles.statsRow, {marginTop: 15}]}>
               <View style={styles.statGroup}>
                 <SafeIcon name="Leaf" color="#5B9A8B" size={24} />
-                <View><Text style={styles.statValue}>{selectedEst.density}</Text><Text style={styles.unitText}>Tons (CO₂e)</Text></View>
+                <View>
+                  <Text style={styles.statValue}>{selectedEst.avg_co2_density}</Text>
+                  <Text style={styles.unitText}>Tons (CO₂e)</Text>
+                </View>
               </View>
               <View style={styles.statGroup}>
                 <SafeIcon name="Thermometer" color="#E8A75D" size={24} />
-                <Text style={styles.statValue}>{selectedEst.temperature_c}°C</Text>
+                <Text style={styles.statValue}>{selectedEst.avg_temperature_c}°C</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={() => setSelectedEst(null)} style={styles.closeBtn}><Text style={[styles.closeBtnText, {color: '#5B9A8B'}]}>Dismiss</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setSelectedEst(null)} style={styles.closeBtn}>
+              <Text style={[styles.closeBtnText, {color: '#5B9A8B'}]}>Dismiss</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
