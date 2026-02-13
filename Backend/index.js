@@ -27,36 +27,29 @@ db.connect(err => {
 });
 
 // ========================
-// Helper: Carbon level logic
-// ========================
-function getCarbonLevel(co2) {
-    if (co2 === null || co2 === undefined) return null;
-    if (co2 >= 0.2) return 'VERY HIGH';
-    if (co2 >= 0.15) return 'HIGH';
-    if (co2 >= 0.08) return 'NORMAL';
-    return 'LOW';
-}
-
-// ========================
-// Helper: Heat index calculation (optional)
-// ========================
-function calculateHeatIndex(temperature_c, humidity) {
-    if (temperature_c === undefined || humidity === undefined) return null;
-    const T = temperature_c;
-    const R = humidity;
-    const HI = 0.5 * (T + 61.0 + ((T - 68.0) * 1.2) + (R * 0.094));
-    return parseFloat(HI.toFixed(2));
-}
-
-// ========================
 // POST: Insert sensor data
 // ========================
 app.post('/create/sensor-data', (req, res) => {
-    const { sensor_id, co2_density, temperature_c, humidity, heat_index_c, carbon_level } = req.body;
+    const {
+        sensor_id,
+        co2_density,
+        temperature_c,
+        humidity,
+        heat_index_c,
+        carbon_level
+    } = req.body;
 
-    if (sensor_id === undefined || temperature_c === undefined || co2_density === undefined) {
-        return res.status(400).json({ error: 'Missing required fields' });
-    }
+        if (
+            sensor_id === undefined ||
+            co2_density === undefined ||
+            temperature_c === undefined ||
+            humidity === undefined ||
+            heat_index_c === undefined ||
+            !carbon_level
+        ) {
+    return res.status(400).json({ error: 'Missing required fields' });
+}
+
 
     const sql = `
         INSERT INTO sensor_data
@@ -64,7 +57,14 @@ app.post('/create/sensor-data', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    db.query(sql, [sensor_id, co2_density, temperature_c, humidity, heat_index_c, carbon_level], (err, result) => {
+    db.query(sql, [
+        sensor_id,
+        co2_density,
+        temperature_c,
+        humidity,
+        heat_index_c,
+        carbon_level
+    ], (err, result) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ error: 'Database error' });
@@ -77,31 +77,6 @@ app.post('/create/sensor-data', (req, res) => {
     });
 });
 
-// ========================
-// GET: Latest sensor data for a sensor
-// ========================
-app.get('/sensor-data', (req, res) => {
-    const { sensor_id } = req.query; // <-- use query parameter
-
-    if (!sensor_id) return res.status(400).json({ error: 'sensor_id is required' });
-
-    const sql = `
-        SELECT *
-        FROM sensor_data
-        WHERE sensor_id = ?
-        ORDER BY recorded_at DESC
-        LIMIT 1
-    `;
-
-    db.query(sql, [sensor_id], (err, results) => {
-        if (err) {
-            console.error('DB Query Error:', err);
-            return res.status(500).json({ error: 'Database error', details: err.message });
-        }
-        if (results.length === 0) return res.status(404).json({ message: 'No data found for this sensor' });
-        res.json(results[0]);
-    });
-});
 
 // ========================
 // Start server
@@ -109,4 +84,5 @@ app.get('/sensor-data', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+  
 });
