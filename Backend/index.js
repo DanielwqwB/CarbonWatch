@@ -10,13 +10,6 @@ app.use(bodyParser.json());
 // ========================
 // MySQL connection
 // ========================
-const db = mysql.createConnection({
-    host: 'mysql-c8cdfc5-ariasampoy414-f96b.c.aivencloud.com',
-    user: 'avnadmin',
-    password: 'AVNS_eOmYS1PNHeCkK945wot',
-    database: 'defaultdb',
-    port: 27069
-});
 
 db.connect(err => {
     if (err) {
