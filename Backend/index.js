@@ -11,11 +11,11 @@ app.use(bodyParser.json());
 // MySQL connection
 // ========================
 const db = mysql.createConnection({
-    host: 'mysql-360d30a7-gbox-6009.a.aivencloud.com',
+    host: 'mysql-c8cdfc5-ariasampoy414-f96b.c.aivencloud.com',
     user: 'avnadmin',
-    password: 'AVNS_xRg_1Ymj9oje4V_wSeq',
+    password: 'AVNS_eOmYS1PNHeCkK945wot',
     database: 'defaultdb',
-    port: 11105
+    port: 27069
 });
 
 db.connect(err => {
