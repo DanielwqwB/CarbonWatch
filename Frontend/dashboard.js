@@ -1,86 +1,157 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  ScrollView, 
-  TouchableOpacity, 
-  StyleSheet, 
-  SafeAreaView, 
-  Platform,
-  StatusBar,
-  ActivityIndicator
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  SafeAreaView, Platform, StatusBar, ActivityIndicator,
 } from 'react-native';
-import { 
-  ArrowLeft, 
-  Settings, 
-  ChevronDown, 
-  Thermometer, 
-  CloudFog, 
-  ClipboardList, 
-  Users, 
-  Calendar,
-  TrendingUp,
-  TrendingDown
+import {
+  Settings, ChevronDown, Thermometer, CloudFog,
+  Wind, Droplets, TrendingUp, TrendingDown,
+  Gauge, AlertTriangle, Calendar,
 } from 'lucide-react-native';
+import CalendarPicker from './Calendarpicker';
 
-const Dashboard = () => {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState(null);
-  const [selectedDate, setSelectedDate] = useState('January 2026');
+const SENSOR_API      = 'https://bytetech-final1.onrender.com/sensor';
+const SENSOR_DATA_API = 'https://bytetech-final1.onrender.com/sensor-data';
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
 
-  const fetchDashboardData = async () => {
+const getCarbonColor = (level) => {
+  if (!level) return '#22C55E';
+  switch (level.toUpperCase()) {
+    case 'VERY HIGH': return '#D64545';
+    case 'HIGH':      return '#E8A75D';
+    case 'MODERATE':  return '#F59E0B';
+    case 'LOW':       return '#3B82F6';
+    default:          return '#22C55E';
+  }
+};
+
+const getRankColor = (rank) =>
+  (['#FF5C4D','#FF7A6E','#FF9890','#FFB6B1','#FFC5C0'])[rank - 1] || '#F8F9FA';
+
+export default function Dashboard() {
+  const [loading, setLoading]           = useState(true);
+  const [allMerged, setAllMerged]       = useState([]);   // full unfiltered list
+  const [error, setError]               = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [earliestDate, setEarliestDate] = useState(null);
+
+  // Selected period — default to whatever month the data actually has
+  const [selected, setSelected] = useState(null);  // { year, month }
+
+  // ── Fetch & join ────────────────────────────────────────────────────────────
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://bytetech-final1.onrender.com/dashboard');
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      setError(false);
+
+      const [sensorRes, dataRes] = await Promise.all([
+        fetch(SENSOR_API),
+        fetch(SENSOR_DATA_API),
+      ]);
+
+      const sensorList = await sensorRes.json();
+      const dataJson   = await dataRes.json();
+      const dataList   = Array.isArray(dataJson) ? dataJson : (dataJson.data || []);
+
+      const dataMap = {};
+      dataList.forEach(d => { dataMap[d.sensor_id] = d; });
+
+      const merged = (Array.isArray(sensorList) ? sensorList : []).map(s => ({
+        ...s,
+        ...(dataMap[s.sensor_id] || {}),
+      }));
+
+      setAllMerged(merged);
+
+      // Find earliest recorded_at to seed the calendar range
+      const dates = dataList
+        .map(d => d.recorded_at)
+        .filter(Boolean)
+        .map(d => new Date(d))
+        .sort((a, b) => a - b);
+
+      if (dates.length) {
+        const earliest = dates[0];
+        setEarliestDate(earliest.toISOString());
+
+        // Auto-select the month of the most recent reading
+        const latest = dates[dates.length - 1];
+        setSelected({ year: latest.getFullYear(), month: latest.getMonth() });
       }
-      
-      const result = await response.json();
-      setData(result);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      setData(null);
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+      setError(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const getColorForRank = (rank) => {
-    const colors = ['#FF5C4D', '#FF7A6E', '#FF9890', '#FFB6B1', '#FFC5C0'];
-    return colors[rank - 1] || '#F8F9FA';
+  useEffect(() => { fetchData(); }, []);
+
+  // ── Filter merged data to selected month ────────────────────────────────────
+  const merged = useMemo(() => {
+    if (!selected || !allMerged.length) return allMerged;
+
+    return allMerged.filter(s => {
+      if (!s.recorded_at) return false;
+      const d = new Date(s.recorded_at);
+      return d.getFullYear() === selected.year && d.getMonth() === selected.month;
+    });
+  }, [allMerged, selected]);
+
+  const hasData = merged.length > 0;
+
+  // ── Derived metrics (all guard against empty) ───────────────────────────────
+  const totalCO2 = merged.reduce((sum, s) => sum + (parseFloat(s.co2_density) || 0), 0);
+
+  const avgOf = (key, parser = parseFloat) => {
+    const valid = merged.filter(s => s[key] != null);
+    if (!valid.length) return '—';
+    return (valid.reduce((s, x) => s + parser(x[key]), 0) / valid.length).toFixed(1);
   };
 
-  const getProgressWidth = (emission, maxEmission) => {
-    const percentage = (emission / maxEmission) * 100;
-    return `${Math.min(percentage, 100)}%`;
-  };
+  const avgTemp  = avgOf('temperature_c');
+  const avgHumid = avgOf('humidity');
+  const avgHeat  = avgOf('heat_index_c');
 
-  const getMonthComparison = () => {
-    if (!data?.monthlyCO2Comparison || data.monthlyCO2Comparison.length < 2) {
-      return { percent: 0, isIncrease: false };
-    }
-    
-    const currentMonth = data.monthlyCO2Comparison[data.monthlyCO2Comparison.length - 1];
-    const previousMonth = data.monthlyCO2Comparison[data.monthlyCO2Comparison.length - 2];
-    
-    if (!previousMonth || previousMonth.total === 0) {
-      return { percent: 0, isIncrease: false };
-    }
-    
-    const percent = ((currentMonth.total - previousMonth.total) / previousMonth.total) * 100;
-    return { 
-      percent: Math.abs(percent).toFixed(1), 
-      isIncrease: percent > 0,
-      previousMonth: previousMonth.month
-    };
-  };
+  const heatStressCount = merged.filter(s => parseFloat(s.heat_index_c) >= 41).length;
+  const veryHighCount   = merged.filter(s => (s.carbon_level || '').toUpperCase() === 'VERY HIGH').length;
 
+  const carbonCounts = { 'VERY HIGH': 0, HIGH: 0, MODERATE: 0, LOW: 0, NORMAL: 0 };
+  merged.forEach(s => {
+    const l = (s.carbon_level || 'NORMAL').toUpperCase();
+    if (carbonCounts[l] !== undefined) carbonCounts[l]++;
+  });
+
+  const topBarangays = [...merged]
+    .filter(s => s.co2_density != null)
+    .sort((a, b) => b.co2_density - a.co2_density)
+    .slice(0, 5);
+
+  const maxCO2 = topBarangays.length
+    ? Math.max(...topBarangays.map(s => parseFloat(s.co2_density) || 0))
+    : 1;
+
+  const trendUp   = topBarangays.length >= 2
+    ? parseFloat(topBarangays[0].co2_density) > parseFloat(topBarangays[1].co2_density)
+    : false;
+  const trendDiff = topBarangays.length >= 2
+    ? Math.abs(
+        ((parseFloat(topBarangays[0].co2_density) - parseFloat(topBarangays[1].co2_density))
+          / parseFloat(topBarangays[1].co2_density)) * 100
+      ).toFixed(1)
+    : '0';
+
+  // ── Selected period label ───────────────────────────────────────────────────
+  const periodLabel = selected
+    ? `${MONTHS[selected.month]} ${selected.year}`
+    : 'Loading…';
+
+  // ── Loading / error ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -92,12 +163,12 @@ const Dashboard = () => {
     );
   }
 
-  if (!data) {
+  if (error) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={[styles.container, styles.centerContent]}>
           <Text style={styles.errorText}>Failed to load data</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchDashboardData}>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchData}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -105,444 +176,290 @@ const Dashboard = () => {
     );
   }
 
-  const maxEmission = data.topBarangays.length > 0 
-    ? Math.max(...data.topBarangays.map(b => b.total_emission))
-    : 1;
-
-  const comparison = getMonthComparison();
-  const inspectionDrop = parseFloat(data.inspectionDropPercent).toFixed(1);
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.statusBarPlaceholder} />
 
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer} 
-        showsVerticalScrollIndicator={false}
-      >
-        
-        {/* Header */}
+      {/* Calendar Picker Modal */}
+      <CalendarPicker
+        visible={calendarVisible}
+        onClose={() => setCalendarVisible(false)}
+        mode="monthly"
+        selected={selected}
+        onSelect={setSelected}
+        earliestDate={earliestDate}
+      />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+
+        {/* ── Header ──────────────────────────────────────────────────── */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.iconButton}>
-            <ArrowLeft color="#2D2D2D" size={24} />
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>ENVI Analytics</Text>
           <TouchableOpacity style={styles.iconButton}>
             <Settings color="#2D2D2D" size={24} />
           </TouchableOpacity>
         </View>
 
-        {/* Date Selector */}
-        <TouchableOpacity style={styles.dateSelector}>
-          <Text style={styles.dateText}>{selectedDate}</Text>
-          <ChevronDown color="#2D2D2D" size={20} />
+        {/* ── Date Selector ────────────────────────────────────────────── */}
+        <TouchableOpacity style={styles.dateSelector} onPress={() => setCalendarVisible(true)}>
+          <View style={styles.dateSelectorLeft}>
+            <Calendar color="#FF5C4D" size={18} />
+            <Text style={styles.dateText}>{periodLabel}</Text>
+          </View>
+          <View style={styles.dateSelectorRight}>
+            <Text style={styles.sensorCountText}>
+              {hasData ? `${merged.length} sensors` : 'No data'}
+            </Text>
+            <ChevronDown color="#9CA3AF" size={18} />
+          </View>
         </TouchableOpacity>
 
-        {/* Key Metrics Grid (2x2) */}
-        <View style={styles.metricsGrid}>
-          
-          {/* Row 1 */}
-          <View style={styles.row}>
-            {/* Heat Stress */}
-            <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#FFF0EE' }]}>
-                <Thermometer color="#FF5C4D" size={22} />
-              </View>
-              <Text style={styles.metricValue}>{data.heatStressCases}</Text>
-              <Text style={styles.metricLabel}>Heat Stress Cases</Text>
-            </View>
-
-            {/* Inspection Drop */}
-            <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#F8F9FA' }]}>
-                <ClipboardList color="#2D2D2D" size={22} />
-              </View>
-              <Text style={styles.metricValue}>{inspectionDrop}%</Text>
-              <Text style={styles.metricLabel}>Inspection Drop</Text>
-            </View>
+        {/* ── No data for selected period ──────────────────────────────── */}
+        {!hasData ? (
+          <View style={styles.noDataCard}>
+            <Calendar color="#D1D5DB" size={40} />
+            <Text style={styles.noDataTitle}>No readings in {periodLabel}</Text>
+            <Text style={styles.noDataSub}>
+              Sensor data was first recorded in{' '}
+              {earliestDate
+                ? `${MONTHS[new Date(earliestDate).getMonth()]} ${new Date(earliestDate).getFullYear()}`
+                : '—'}
+              . Try selecting that month.
+            </Text>
+            <TouchableOpacity
+              style={styles.noDataBtn}
+              onPress={() => {
+                if (earliestDate) {
+                  const d = new Date(earliestDate);
+                  setSelected({ year: d.getFullYear(), month: d.getMonth() });
+                }
+              }}
+            >
+              <Text style={styles.noDataBtnText}>Jump to data</Text>
+            </TouchableOpacity>
           </View>
-
-          {/* Row 2 */}
-          <View style={styles.row}>
-            {/* Emission Tons */}
-            <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#FFF0EE' }]}>
-                <CloudFog color="#FF5C4D" size={22} />
+        ) : (
+          <>
+            {/* ── Metrics Grid ─────────────────────────────────────────── */}
+            <View style={styles.metricsGrid}>
+              <View style={styles.row}>
+                <View style={styles.card}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#FFF0EE' }]}>
+                    <Thermometer color="#FF5C4D" size={22} />
+                  </View>
+                  <Text style={styles.metricValue}>{avgTemp}°C</Text>
+                  <Text style={styles.metricLabel}>Avg Temperature</Text>
+                </View>
+                <View style={styles.card}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#EFF6FF' }]}>
+                    <Wind color="#3B82F6" size={22} />
+                  </View>
+                  <Text style={styles.metricValue}>{totalCO2.toFixed(0)}</Text>
+                  <Text style={styles.metricLabel}>Total CO₂ (ppm)</Text>
+                </View>
               </View>
-              <Text style={styles.metricValue}>{data.totalEmission.toFixed(1)}</Text>
-              <Text style={styles.metricLabel}>Total Emission Tons</Text>
+              <View style={styles.row}>
+                <View style={styles.card}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#ECFEFF' }]}>
+                    <Droplets color="#06B6D4" size={22} />
+                  </View>
+                  <Text style={styles.metricValue}>{avgHumid}%</Text>
+                  <Text style={styles.metricLabel}>Avg Humidity</Text>
+                </View>
+                <View style={styles.card}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#FFF7ED' }]}>
+                    <AlertTriangle color="#F97316" size={22} />
+                  </View>
+                  <Text style={styles.metricValue}>{heatStressCount}</Text>
+                  <Text style={styles.metricLabel}>Heat Stress Sensors</Text>
+                </View>
+              </View>
             </View>
 
-            {/* Users */}
-            <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#F8F9FA' }]}>
-                <Users color="#2D2D2D" size={22} />
-              </View>
-              <Text style={styles.metricValue}>{data.totalUsers.toLocaleString()}</Text>
-              <Text style={styles.metricLabel}>Users</Text>
-            </View>
-          </View>
-
-        </View>
-
-        {/* Top Barangays List */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Top {data.topBarangays.length} Barangays by Carbon Emission</Text>
-          
-          {data.topBarangays.length > 0 ? (
-            <View style={styles.listContainer}>
-              {data.topBarangays.map((item, index) => {
-                const rank = index + 1;
-                const color = getColorForRank(rank);
-                const width = getProgressWidth(item.total_emission, maxEmission);
-                
-                return (
-                  <View key={index} style={styles.listItem}>
-                    <View style={[
-                      styles.rankBadge, 
-                      { backgroundColor: rank <= 3 ? color : '#F8F9FA' }
-                    ]}>
-                      <Text style={[
-                        styles.rankText,
-                        { color: rank <= 3 ? '#FFFFFF' : '#2D2D2D' }
-                      ]}>{rank}</Text>
+            {/* ── Carbon Level Pills ───────────────────────────────────── */}
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>Carbon Level Distribution</Text>
+              <View style={styles.pillsRow}>
+                {Object.entries(carbonCounts).map(([level, count]) => {
+                  const color = getCarbonColor(level);
+                  return (
+                    <View key={level} style={[styles.pill, { backgroundColor: color + '22', borderColor: color }]}>
+                      <Text style={[styles.pillCount, { color }]}>{count}</Text>
+                      <Text style={[styles.pillLabel, { color }]}>
+                        {level === 'VERY HIGH' ? 'V.HIGH' : level}
+                      </Text>
                     </View>
-                    
+                  );
+                })}
+              </View>
+              <View style={styles.heatRow}>
+                <Gauge color="#F97316" size={18} />
+                <Text style={styles.heatText}>
+                  Avg Heat Index:{' '}
+                  <Text style={{ fontWeight: '700', color: '#F97316' }}>{avgHeat}°C</Text>
+                </Text>
+                {veryHighCount > 0 && (
+                  <View style={styles.alertPill}>
+                    <Text style={styles.alertText}>{veryHighCount} VERY HIGH ⚠️</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* ── Top 5 Barangays ──────────────────────────────────────── */}
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                Top {topBarangays.length} Barangays by CO₂ — {periodLabel}
+              </Text>
+              {topBarangays.map((item, index) => {
+                const rank     = index + 1;
+                const color    = getRankColor(rank);
+                const co2      = parseFloat(item.co2_density) || 0;
+                const pct      = maxCO2 > 0 ? `${Math.round((co2 / maxCO2) * 100)}%` : '0%';
+                const lvlColor = getCarbonColor(item.carbon_level);
+
+                return (
+                  <View key={item.sensor_id} style={styles.listItem}>
+                    <View style={[styles.rankBadge, { backgroundColor: rank <= 3 ? color : '#F8F9FA' }]}>
+                      <Text style={[styles.rankText, { color: rank <= 3 ? '#FFFFFF' : '#2D2D2D' }]}>
+                        {rank}
+                      </Text>
+                    </View>
                     <View style={styles.progressContainer}>
                       <View style={styles.progressLabelRow}>
-                        <Text style={styles.barangayName}>{item.barangay_name}</Text>
-                        <Text style={styles.barangayValue}>{item.total_emission.toFixed(1)} Tons</Text>
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.barangayName} numberOfLines={1}>{item.barangay_name}</Text>
+                          {item.carbon_level && (
+                            <View style={[styles.inlineLevelBadge, { backgroundColor: lvlColor + '22' }]}>
+                              <Text style={[styles.inlineLevelText, { color: lvlColor }]}>
+                                {item.carbon_level}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.barangayValue}>{co2} ppm</Text>
                       </View>
                       <View style={styles.progressBarBackground}>
-                        <View 
-                          style={[
-                            styles.progressBarFill, 
-                            { backgroundColor: color, width: width }
-                          ]} 
-                        />
+                        <View style={[styles.progressBarFill, { backgroundColor: color, width: pct }]} />
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailText}>🌡 {item.temperature_c ?? '—'}°C</Text>
+                        <Text style={styles.detailText}>
+                          💧 {item.humidity != null ? `${parseFloat(item.humidity).toFixed(0)}%` : '—'}
+                        </Text>
+                        <Text style={styles.detailText}>🔥 HI {item.heat_index_c ?? '—'}°C</Text>
                       </View>
                     </View>
                   </View>
                 );
               })}
             </View>
-          ) : (
-            <Text style={styles.noDataText}>No barangay data available</Text>
-          )}
-        </View>
 
-        {/* Footer Summary */}
-        <View style={styles.footerContainer}>
-          <View style={styles.footerHeader}>
-            <Calendar color="#2D2D2D" size={20} />
-            <Text style={styles.footerDate}>{selectedDate}</Text>
-          </View>
-          
-          <View style={styles.totalRow}>
-            <View style={styles.totalValueContainer}>
-              <View style={[
-                styles.arrowIconBox,
-                { backgroundColor: comparison.isIncrease ? '#FFF0EE' : '#F0FFF4' }
-              ]}>
-                {comparison.isIncrease ? (
-                  <TrendingUp color="#FF5C4D" size={20} strokeWidth={2.5} />
-                ) : (
-                  <TrendingDown color="#10B981" size={20} strokeWidth={2.5} />
-                )}
+            {/* ── Footer Summary ───────────────────────────────────────── */}
+            <View style={styles.footerContainer}>
+              <View style={styles.footerHeader}>
+                <CloudFog color="#6B7280" size={20} />
+                <Text style={styles.footerLabel}>City-wide CO₂ — {periodLabel}</Text>
               </View>
-              <Text style={[
-                styles.totalValueText,
-                { color: comparison.isIncrease ? '#FF5C4D' : '#10B981' }
-              ]}>
-                {data.totalEmission.toFixed(1)}
-              </Text>
-            </View>
-            <Text style={styles.totalLabelText}>
-              Tons Total CO₂
-            </Text>
-          </View>
-
-          {comparison.previousMonth && (
-            <View style={styles.comparisonRow}>
-              <View style={[
-                styles.comparisonBadge,
-                { backgroundColor: comparison.isIncrease ? '#FFF0EE' : '#F0FFF4' }
-              ]}>
-                <Text style={[
-                  styles.comparisonText,
-                  { color: comparison.isIncrease ? '#FF5C4D' : '#10B981' }
-                ]}>
-                  {comparison.isIncrease ? '↑' : '↓'} {comparison.percent}%
-                </Text>
+              <View style={styles.totalRow}>
+                <View style={styles.totalValueContainer}>
+                  <View style={[styles.arrowIconBox, { backgroundColor: trendUp ? '#FFF0EE' : '#F0FFF4' }]}>
+                    {trendUp
+                      ? <TrendingUp color="#FF5C4D" size={20} strokeWidth={2.5} />
+                      : <TrendingDown color="#10B981" size={20} strokeWidth={2.5} />}
+                  </View>
+                  <Text style={[styles.totalValueText, { color: trendUp ? '#FF5C4D' : '#10B981' }]}>
+                    {totalCO2.toFixed(0)}
+                  </Text>
+                </View>
+                <Text style={styles.totalLabelText}>ppm Total CO₂</Text>
               </View>
-              <Text style={styles.comparisonLabel}>
-                vs {comparison.previousMonth}
-              </Text>
+              {topBarangays.length >= 2 && (
+                <View style={styles.comparisonRow}>
+                  <View style={[styles.comparisonBadge, { backgroundColor: trendUp ? '#FFF0EE' : '#F0FFF4' }]}>
+                    <Text style={[styles.comparisonText, { color: trendUp ? '#FF5C4D' : '#10B981' }]}>
+                      {trendUp ? '↑' : '↓'} {trendDiff}%
+                    </Text>
+                  </View>
+                  <Text style={styles.comparisonLabel}>#1 vs #2 sensor</Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA', 
-  },
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#2D2D2D',
-    fontWeight: '500',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#FF5C4D',
-    marginBottom: 16,
-    fontWeight: '600',
-  },
-  retryButton: {
-    backgroundColor: '#FF5C4D',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  noDataText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  statusBarPlaceholder: {
-    height: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    backgroundColor: '#F8F9FA',
-  },
-  scrollContainer: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#2D2D2D',
-  },
-  iconButton: {
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  dateSelector: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2D2D2D',
-  },
-  metricsGrid: {
-    marginBottom: 20,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  card: {
-    width: '48%', 
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  metricValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#2D2D2D',
-    marginBottom: 4,
-  },
-  metricLabel: {
-    fontSize: 13,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  sectionContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2D2D2D',
-    marginBottom: 20,
-  },
-  listContainer: {
-    gap: 16,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  rankBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    marginTop: 2,
-  },
-  rankText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  progressContainer: {
-    flex: 1,
-  },
-  progressLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  barangayName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2D2D2D',
-  },
-  barangayValue: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  progressBarBackground: {
-    height: 8,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 4,
-    width: '100%',
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  footerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  footerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  footerDate: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#6B7280',
-    marginLeft: 8,
-  },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  totalValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  arrowIconBox: {
-    padding: 8,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  totalValueText: {
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  totalLabelText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  comparisonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  comparisonBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  comparisonText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  comparisonLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-});
+  container:             { flex: 1, backgroundColor: '#F8F9FA' },
+  centerContent:         { justifyContent: 'center', alignItems: 'center' },
+  loadingText:           { marginTop: 12, fontSize: 16, color: '#2D2D2D', fontWeight: '500' },
+  errorText:             { fontSize: 16, color: '#FF5C4D', marginBottom: 16, fontWeight: '600' },
+  retryButton:           { backgroundColor: '#FF5C4D', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  retryButtonText:       { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  statusBarPlaceholder:  { height: Platform.OS === 'android' ? StatusBar.currentHeight : 0, backgroundColor: '#F8F9FA' },
+  scrollContainer:       { padding: 20, paddingBottom: 40 },
 
-export default Dashboard;
+  header:                { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerTitle:           { fontSize: 24, fontWeight: '700', color: '#2D2D2D' },
+  iconButton:            { padding: 8, borderRadius: 12, backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+
+  dateSelector:          { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  dateSelectorLeft:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dateSelectorRight:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dateText:              { fontSize: 15, fontWeight: '600', color: '#2D2D2D' },
+  sensorCountText:       { fontSize: 12, color: '#9CA3AF', fontWeight: '500' },
+
+  noDataCard:            { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 40, alignItems: 'center', marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  noDataTitle:           { fontSize: 17, fontWeight: '700', color: '#2D2D2D', marginTop: 16, marginBottom: 8, textAlign: 'center' },
+  noDataSub:             { fontSize: 13, color: '#9CA3AF', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  noDataBtn:             { backgroundColor: '#FF5C4D', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
+  noDataBtnText:         { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  metricsGrid:           { marginBottom: 20 },
+  row:                   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  card:                  { width: '48%', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  iconCircle:            { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  metricValue:           { fontSize: 26, fontWeight: '700', color: '#2D2D2D', marginBottom: 4 },
+  metricLabel:           { fontSize: 12, color: '#6B7280', textAlign: 'center', lineHeight: 18 },
+
+  sectionContainer:      { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  sectionTitle:          { fontSize: 16, fontWeight: '600', color: '#2D2D2D', marginBottom: 16 },
+  pillsRow:              { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  pill:                  { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, marginHorizontal: 3 },
+  pillCount:             { fontSize: 18, fontWeight: '700' },
+  pillLabel:             { fontSize: 9, fontWeight: '600', marginTop: 2 },
+  heatRow:               { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF7ED', padding: 12, borderRadius: 10 },
+  heatText:              { fontSize: 13, color: '#6B7280', marginLeft: 8, flex: 1 },
+  alertPill:             { backgroundColor: '#FEF2F2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  alertText:             { fontSize: 11, color: '#D64545', fontWeight: '700' },
+
+  listItem:              { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 },
+  rankBadge:             { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 12, marginTop: 2 },
+  rankText:              { fontSize: 12, fontWeight: '700' },
+  progressContainer:     { flex: 1 },
+  progressLabelRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  barangayName:          { fontSize: 14, fontWeight: '600', color: '#2D2D2D', marginRight: 6, flexShrink: 1 },
+  inlineLevelBadge:      { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  inlineLevelText:       { fontSize: 9, fontWeight: '700' },
+  barangayValue:         { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  progressBarBackground: { height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden', marginBottom: 6 },
+  progressBarFill:       { height: '100%', borderRadius: 4 },
+  detailRow:             { flexDirection: 'row', gap: 12 },
+  detailText:            { fontSize: 11, color: '#9CA3AF' },
+
+  footerContainer:       { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  footerHeader:          { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  footerLabel:           { fontSize: 14, fontWeight: '500', color: '#6B7280', marginLeft: 8 },
+  totalRow:              { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  totalValueContainer:   { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
+  arrowIconBox:          { padding: 8, borderRadius: 8, marginRight: 8 },
+  totalValueText:        { fontSize: 32, fontWeight: '700' },
+  totalLabelText:        { fontSize: 16, fontWeight: '500', color: '#6B7280' },
+  comparisonRow:         { flexDirection: 'row', alignItems: 'center' },
+  comparisonBadge:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginRight: 8 },
+  comparisonText:        { fontSize: 14, fontWeight: '700' },
+  comparisonLabel:       { fontSize: 14, color: '#6B7280' },
+});

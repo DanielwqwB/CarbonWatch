@@ -12,6 +12,8 @@
     "@rnmapbox/maps": "^10.2.10",
     "axios": "^1.13.4",
     "expo": "~54.0.33",
+    "expo-blur": "~15.0.8",
+    "expo-linear-gradient": "~15.0.8",
     "expo-location": "~19.0.8",
     "expo-status-bar": "~3.0.9",
     "lucide-react": "^0.563.0",
