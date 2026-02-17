@@ -20,13 +20,9 @@ export default function Reports({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [establishments, setEstablishments] = useState([]);
   const [barangayData, setBarangayData] = useState([]);
-  const [reportType, setReportType] = useState('monthly'); // 'monthly' or 'weekly'
+  const [reportType, setReportType] = useState('monthly');
   const [selectedMonth, setSelectedMonth] = useState('February 2026');
-  const [carbonStats, setCarbonStats] = useState({
-    red: 0,
-    yellow: 0,
-    green: 0
-  });
+  const [carbonStats, setCarbonStats] = useState({ red: 0, yellow: 0, green: 0 });
 
   useEffect(() => {
     fetchReports();
@@ -53,9 +49,7 @@ export default function Reports({ navigation }) {
           };
         });
         
-        const sortedBarangays = barangaysWithEmissions
-          .sort((a, b) => b.co2_emission - a.co2_emission);
-        
+        const sortedBarangays = barangaysWithEmissions.sort((a, b) => b.co2_emission - a.co2_emission);
         setBarangayData(sortedBarangays);
       }
     } catch (err) {
@@ -64,7 +58,6 @@ export default function Reports({ navigation }) {
     }
   };
 
-  // FIXED: Aggregation function to handle both monthly and weekly data
   const aggregateData = (rawData, type) => {
     if (!rawData || rawData.length === 0) return [];
     
@@ -72,7 +65,6 @@ export default function Reports({ navigation }) {
       const monthlyMap = {};
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       
-      // Initialize all 12 months with 0
       for (let i = 0; i < 12; i++) {
         monthlyMap[i] = {
           month: monthNames[i],
@@ -85,8 +77,6 @@ export default function Reports({ navigation }) {
       rawData.forEach(record => {
         const date = new Date(record.recorded_at);
         const monthIndex = date.getMonth();
-        
-        // Convert from decimals to tons (multiply by 1000)
         const emission = parseFloat(record.co2_emission) || 0;
         monthlyMap[monthIndex].co2_emission += (emission * 1000);
         monthlyMap[monthIndex].count += 1;
@@ -95,11 +85,9 @@ export default function Reports({ navigation }) {
       return Object.values(monthlyMap);
       
     } else {
-      // FIXED: Weekly aggregation logic
       const weeklyMap = {};
       const now = new Date();
       
-      // Initialize 4 weeks (Week 1 = most recent, Week 4 = oldest)
       for (let i = 0; i < 4; i++) {
         weeklyMap[i] = {
           week: `Week ${4 - i}`,
@@ -114,15 +102,13 @@ export default function Reports({ navigation }) {
         const daysDiff = Math.floor((now - recordDate) / (1000 * 60 * 60 * 24));
         const weekIndex = Math.floor(daysDiff / 7);
         
-        // Map to correct week (0 = current week, 3 = 3 weeks ago)
         if (weekIndex >= 0 && weekIndex < 4) {
           const emission = parseFloat(record.co2_emission) || 0;
-          weeklyMap[weekIndex].co2_emission += (emission * 1000); // Convert to tons
+          weeklyMap[weekIndex].co2_emission += (emission * 1000);
           weeklyMap[weekIndex].count += 1;
         }
       });
       
-      // Return weeks in reverse order (Week 1 first, Week 4 last)
       return Object.values(weeklyMap).reverse();
     }
   };
@@ -131,7 +117,6 @@ export default function Reports({ navigation }) {
     try {
       setLoading(true);
       
-      // Use the correct API endpoint based on report type
       const endpoint = reportType === 'monthly' 
         ? `${BASE_URL}/monthly`
         : `${BASE_URL}/weekly`;
@@ -139,10 +124,6 @@ export default function Reports({ navigation }) {
       const res = await fetch(endpoint);
       const responseData = await res.json();
       
-      console.log('API Endpoint:', endpoint);
-      console.log('Raw API Response:', responseData);
-      
-      // Extract data from the API structure
       let rawData = [];
       if (responseData && Array.isArray(responseData.sensorData)) {
         rawData = responseData.sensorData;
@@ -152,19 +133,9 @@ export default function Reports({ navigation }) {
         rawData = responseData.data;
       }
       
-      console.log(`${reportType} data count:`, rawData.length);
-      if (rawData.length > 0) {
-        console.log('Sample record:', rawData[0]);
-      }
-      
-      // Aggregate data based on report type
       const aggregatedData = aggregateData(rawData, reportType);
-      
-      console.log('Aggregated Data:', aggregatedData);
-      
       setEstablishments(aggregatedData);
 
-      // Calculate carbon stats from aggregated data
       if (aggregatedData.length > 0) {
         const totalRed = aggregatedData
           .filter(e => e.co2_emission > 50)
@@ -176,20 +147,15 @@ export default function Reports({ navigation }) {
           .filter(e => e.co2_emission <= 20)
           .reduce((sum, e) => sum + e.co2_emission, 0);
 
-        setCarbonStats({
-          red: totalRed,
-          yellow: totalYellow,
-          green: totalGreen
-        });
+        setCarbonStats({ red: totalRed, yellow: totalYellow, green: totalGreen });
       } else {
         setCarbonStats({ red: 0, yellow: 0, green: 0 });
       }
 
-      // Update barangay data from the breakdown if available
       if (responseData && Array.isArray(responseData.breakdown)) {
         const barangaysFromBreakdown = responseData.breakdown.map(b => ({
           barangay_name: b.barangay_name,
-          co2_emission: parseFloat(b.total) * 1000, // Convert to tons
+          co2_emission: parseFloat(b.total) * 1000,
           percentage: parseFloat(b.percentage)
         }));
         setBarangayData(barangaysFromBreakdown);
@@ -221,30 +187,22 @@ export default function Reports({ navigation }) {
       const labels = establishments.map(e => e.month).filter(Boolean);
       const data = establishments.map(e => Math.max(0, Math.round(e.co2_emission) || 0));
       
-      // Ensure we have exactly 12 data points
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const finalLabels = labels.length === 12 ? labels : monthNames;
       const paddingNeeded = Math.max(0, 12 - data.length);
       const finalData = data.length === 12 ? data : [...data, ...Array(paddingNeeded).fill(0)];
       
-      return {
-        labels: finalLabels,
-        datasets: [{ data: finalData }]
-      };
+      return { labels: finalLabels, datasets: [{ data: finalData }] };
     } else {
       const labels = establishments.map(e => e.week).filter(Boolean);
       const data = establishments.map(e => Math.max(0, Math.round(e.co2_emission) || 0));
       
-      // Ensure we have exactly 4 data points
       const weekNames = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
       const finalLabels = labels.length === 4 ? labels : weekNames;
       const paddingNeeded = Math.max(0, 4 - data.length);
       const finalData = data.length === 4 ? data : [...data, ...Array(paddingNeeded).fill(0)];
       
-      return {
-        labels: finalLabels,
-        datasets: [{ data: finalData }]
-      };
+      return { labels: finalLabels, datasets: [{ data: finalData }] };
     }
   };
 
@@ -265,20 +223,16 @@ export default function Reports({ navigation }) {
     return `${percentage}% of ${target} Tons`;
   };
 
-  // FIXED: Trend calculation for weekly data
   const calculateTrend = () => {
     if (!establishments || !Array.isArray(establishments) || establishments.length === 0) {
       return { value: '0%', direction: 'neutral' };
     }
 
-    // For weekly: compare Week 1 (index 0, most recent) to Week 2 (index 1)
-    // For monthly: compare most recent month to previous month
     const sortedData = [...establishments];
     
     if (reportType === 'monthly') {
       sortedData.sort((a, b) => b.month_number - a.month_number);
     }
-    // For weekly, data is already in correct order (Week 1 first)
     
     if (sortedData.length < 2) {
       return { value: '0%', direction: 'neutral' };
@@ -316,13 +270,9 @@ export default function Reports({ navigation }) {
       ];
     }
 
-    // Sort by co2_emission
     const sortedBarangays = [...barangayData].sort((a, b) => b.co2_emission - a.co2_emission);
-    
-    // Get top 2 barangays
     const top2 = sortedBarangays.slice(0, 2);
     
-    // If we have percentage data from API, use it
     if (top2[0].percentage !== undefined) {
       const top1Percentage = Math.round(parseFloat(top2[0].percentage));
       const top2Percentage = Math.round(parseFloat(top2[1].percentage));
@@ -335,7 +285,6 @@ export default function Reports({ navigation }) {
       ];
     }
     
-    // Otherwise calculate from emissions
     const totalEmissions = sortedBarangays.reduce((sum, b) => sum + (b.co2_emission || 0), 0);
     
     if (totalEmissions === 0) {
@@ -362,8 +311,8 @@ export default function Reports({ navigation }) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={{ marginTop: 10, color: '#777' }}>Loading reports...</Text>
+        <ActivityIndicator size="large" color="#FF5C4D" />
+        <Text style={styles.loadingText}>Loading reports...</Text>
       </View>
     );
   }
@@ -373,14 +322,14 @@ export default function Reports({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reporting</Text>
         <TouchableOpacity>
-          <Ionicons name="download-outline" size={24} color="#111" />
+          <Ionicons name="download-outline" size={24} color="#2D2D2D" />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: 20 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF5C4D']} />
         }
       >
         <View style={styles.toggleContainer}>
@@ -417,12 +366,12 @@ export default function Reports({ navigation }) {
 
         <View style={styles.dateCard}>
           <View style={styles.rowCenter}>
-            <MaterialCommunityIcons name="calendar-month" size={20} color="#4CAF50" />
+            <MaterialCommunityIcons name="calendar-month" size={20} color="#FF5C4D" />
             <Text style={styles.dateText}>
               {reportType === 'monthly' ? selectedMonth : 'February 7 - 13, 2026'}
             </Text>
           </View>
-          <Ionicons name="chevron-down" size={20} color="#777" />
+          <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
         </View>
 
         <View style={styles.card}>
@@ -432,7 +381,7 @@ export default function Reports({ navigation }) {
 
           <View style={styles.summaryTopRow}>
             <View style={styles.iconCircle}>
-              <MaterialCommunityIcons name="leaf" size={32} color="#4CAF50" />
+              <MaterialCommunityIcons name="leaf" size={36} color="#10B981" />
               <View style={styles.co2Badge}>
                 <Text style={styles.co2Text}>CO₂</Text>
               </View>
@@ -445,11 +394,11 @@ export default function Reports({ navigation }) {
                 <MaterialCommunityIcons 
                   name={trend.direction === 'up' ? 'triangle' : trend.direction === 'down' ? 'triangle-down' : 'minus'} 
                   size={12} 
-                  color={trend.direction === 'up' ? '#D32F2F' : trend.direction === 'down' ? '#4CAF50' : '#777'} 
+                  color={trend.direction === 'up' ? '#FF5C4D' : trend.direction === 'down' ? '#10B981' : '#9CA3AF'} 
                 />
                 <Text style={[
                   styles.trendText,
-                  { color: trend.direction === 'up' ? '#D32F2F' : trend.direction === 'down' ? '#4CAF50' : '#777' }
+                  { color: trend.direction === 'up' ? '#FF5C4D' : trend.direction === 'down' ? '#10B981' : '#9CA3AF' }
                 ]}>
                   {trendValue}
                 </Text>
@@ -473,7 +422,7 @@ export default function Reports({ navigation }) {
           <View style={styles.cardHeaderRow}>
             <View style={styles.rowBetween}>
               <Text style={styles.cardTitle}>
-                City-wide {reportType === 'monthly' ? 'Monthly' : 'Weekly'}, CO₂ Emission
+                City-wide {reportType === 'monthly' ? 'Monthly' : 'Weekly'} CO₂ Emission
               </Text>
             </View>
           </View>
@@ -485,13 +434,13 @@ export default function Reports({ navigation }) {
               height={200}
               yAxisSuffix="T"
               chartConfig={{
-                backgroundColor: '#fff',
-                backgroundGradientFrom: '#fff',
-                backgroundGradientTo: '#fff',
+                backgroundColor: '#FFFFFF',
+                backgroundGradientFrom: '#FFFFFF',
+                backgroundGradientTo: '#FFFFFF',
                 decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                barPercentage: 0.5,
+                color: (opacity = 1) => `rgba(255, 92, 77, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(45, 45, 45, ${opacity})`,
+                barPercentage: 0.6,
               }}
               style={{
                 borderRadius: 16,
@@ -500,21 +449,17 @@ export default function Reports({ navigation }) {
               showValuesOnTopOfBars={false}
               withInnerLines={false}
             />
-
-            <View style={styles.targetLineContainer}>
-              <View style={styles.dashedLine} />
-            </View>
           </View>
 
           <View style={styles.chartLegend}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
+              <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
               <Text style={styles.legendText}>
                 Target ({reportType === 'monthly' ? '250T' : '65T'})
               </Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#FF9800' }]} />
+              <View style={[styles.legendDot, { backgroundColor: '#FBBF24' }]} />
               <Text style={styles.legendText}>
                 Limit ({reportType === 'monthly' ? '350T' : '90T'})
               </Text>
@@ -550,49 +495,58 @@ export default function Reports({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f2f4f7'
+    backgroundColor: '#F8F9FA'
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center'
   },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#2D2D2D',
+    fontWeight: '500'
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 50,
-    paddingBottom: 10,
-    backgroundColor: '#fff',
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#111'
+    color: '#2D2D2D'
   },
   toggleContainer: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginTop: 16,
-    gap: 8,
+    marginHorizontal: 20,
+    marginTop: 20,
+    gap: 12,
   },
   toggleButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB'
   },
   toggleButtonActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF5C4D',
+    borderColor: '#FF5C4D'
   },
   toggleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: '#6B7280',
   },
   toggleTextActive: {
     color: '#FFFFFF',
@@ -601,43 +555,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
     marginTop: 16,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    padding: 14,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1
   },
   dateText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginLeft: 10,
-    color: '#333'
+    color: '#2D2D2D'
   },
   rowCenter: {
     flexDirection: 'row',
     alignItems: 'center'
   },
   card: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
     marginTop: 16,
-    padding: 16,
+    padding: 20,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 2,
   },
   cardHeaderRow: {
-    marginBottom: 15
+    marginBottom: 16
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#333'
+    color: '#2D2D2D'
   },
   rowBetween: {
     flexDirection: 'row',
@@ -647,38 +604,39 @@ const styles = StyleSheet.create({
   summaryTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15
+    marginBottom: 16
   },
   iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 4,
-    borderColor: '#4CAF50',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: '#10B981',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 20,
+    backgroundColor: '#F0FFF4'
   },
   co2Badge: {
     position: 'absolute',
-    bottom: 12
+    bottom: 14
   },
   co2Text: {
     fontSize: 8,
-    fontWeight: 'bold',
-    color: '#4CAF50'
+    fontWeight: '700',
+    color: '#10B981'
   },
   statsContainer: {
     flex: 1
   },
   bigNumber: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#4CAF50'
+    fontWeight: '700',
+    color: '#10B981'
   },
   unitText: {
     fontSize: 14,
-    color: '#4CAF50',
+    color: '#10B981',
     marginBottom: 6,
     fontWeight: '600'
   },
@@ -687,55 +645,43 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   trendText: {
-    color: '#D32F2F',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     marginLeft: 4
   },
   divider: {
     height: 1,
-    backgroundColor: '#eee',
-    marginVertical: 10
+    backgroundColor: '#E5E7EB',
+    marginVertical: 12
   },
   locationList: {
-    marginTop: 5
+    marginTop: 8
   },
   locationRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8
+    marginBottom: 10
   },
   locName: {
     fontSize: 14,
-    color: '#555'
+    color: '#6B7280',
+    fontWeight: '500'
   },
   locValue: {
     fontSize: 14,
-    fontWeight: '700'
+    fontWeight: '700',
+    color: '#2D2D2D'
   },
   chartContainer: {
     alignItems: 'center',
-    overflow: 'hidden'
-  },
-  targetLineContainer: {
-    position: 'absolute',
-    top: 60,
-    width: '100%',
-    alignItems: 'center'
-  },
-  dashedLine: {
-    width: '90%',
-    height: 1,
-    borderWidth: 1,
-    borderColor: '#FF9800',
-    borderStyle: 'dashed',
-    borderRadius: 1
+    overflow: 'hidden',
+    marginTop: 8
   },
   chartLegend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 10,
-    gap: 15
+    marginTop: 16,
+    gap: 20
   },
   legendItem: {
     flexDirection: 'row',
@@ -743,30 +689,32 @@ const styles = StyleSheet.create({
   },
   legendDot: {
     width: 10,
-    height: 2,
-    marginRight: 5
+    height: 3,
+    marginRight: 6,
+    borderRadius: 2
   },
   legendText: {
     fontSize: 12,
-    color: '#555'
+    color: '#6B7280',
+    fontWeight: '500'
   },
   insightList: {
-    marginTop: 5
+    marginTop: 8
   },
   bulletRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 12,
     paddingRight: 10
   },
   bulletPoint: {
     fontSize: 18,
-    marginRight: 8,
-    color: '#555',
+    marginRight: 10,
+    color: '#FF5C4D',
     lineHeight: 20
   },
   insightText: {
     fontSize: 14,
-    color: '#444',
+    color: '#2D2D2D',
     flex: 1,
     lineHeight: 20
   },

@@ -19,8 +19,8 @@ import {
   ClipboardList, 
   Users, 
   Calendar,
-  MoveUp,
-  MoveDown
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react-native';
 
 const Dashboard = () => {
@@ -43,28 +43,24 @@ const Dashboard = () => {
       
       const result = await response.json();
       setData(result);
-      console.log('Dashboard data loaded:', result);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      setData(null); // Set to null to show error state
+      setData(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // Function to get color based on rank
   const getColorForRank = (rank) => {
-    const colors = ['#ef4444', '#f97316', '#fdba74', '#facc15', '#4ade80'];
-    return colors[rank - 1] || '#94a3b8';
+    const colors = ['#FF5C4D', '#FF7A6E', '#FF9890', '#FFB6B1', '#FFC5C0'];
+    return colors[rank - 1] || '#F8F9FA';
   };
 
-  // Function to calculate progress bar width
   const getProgressWidth = (emission, maxEmission) => {
     const percentage = (emission / maxEmission) * 100;
     return `${Math.min(percentage, 100)}%`;
   };
 
-  // Calculate comparison with previous month
   const getMonthComparison = () => {
     if (!data?.monthlyCO2Comparison || data.monthlyCO2Comparison.length < 2) {
       return { percent: 0, isIncrease: false };
@@ -89,7 +85,7 @@ const Dashboard = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={[styles.container, styles.centerContent]}>
-          <ActivityIndicator size="large" color="#3b82f6" />
+          <ActivityIndicator size="large" color="#FF5C4D" />
           <Text style={styles.loadingText}>Loading dashboard...</Text>
         </View>
       </SafeAreaView>
@@ -128,45 +124,41 @@ const Dashboard = () => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.iconButton}>
-            <ArrowLeft color="#4b5563" size={24} />
+            <ArrowLeft color="#2D2D2D" size={24} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>ENVI Analytics</Text>
-          <TouchableOpacity style={[styles.iconButton, styles.shadow]}>
-            <Settings color="#6b7280" size={24} />
+          <TouchableOpacity style={styles.iconButton}>
+            <Settings color="#2D2D2D" size={24} />
           </TouchableOpacity>
         </View>
 
         {/* Date Selector */}
         <TouchableOpacity style={styles.dateSelector}>
           <Text style={styles.dateText}>{selectedDate}</Text>
-          <ChevronDown color="#6b7280" size={20} />
+          <ChevronDown color="#2D2D2D" size={20} />
         </TouchableOpacity>
 
         {/* Key Metrics Grid (2x2) */}
-        <View style={{ marginBottom: 24 }}>
+        <View style={styles.metricsGrid}>
           
           {/* Row 1 */}
           <View style={styles.row}>
             {/* Heat Stress */}
             <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#fee2e2' }]}>
-                <Thermometer color="#ef4444" size={20} />
+              <View style={[styles.iconCircle, { backgroundColor: '#FFF0EE' }]}>
+                <Thermometer color="#FF5C4D" size={22} />
               </View>
-              <View>
-                <Text style={styles.metricValue}>{data.heatStressCases}</Text>
-                <Text style={styles.metricLabel}>Heat Stress Cases</Text>
-              </View>
+              <Text style={styles.metricValue}>{data.heatStressCases}</Text>
+              <Text style={styles.metricLabel}>Heat Stress Cases</Text>
             </View>
 
             {/* Inspection Drop */}
             <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
-                <ClipboardList color="#1e40af" size={20} />
+              <View style={[styles.iconCircle, { backgroundColor: '#F8F9FA' }]}>
+                <ClipboardList color="#2D2D2D" size={22} />
               </View>
-              <View>
-                <Text style={styles.metricValue}>{inspectionDrop}%</Text>
-                <Text style={styles.metricLabel}>Inspection Drop</Text>
-              </View>
+              <Text style={styles.metricValue}>{inspectionDrop}%</Text>
+              <Text style={styles.metricLabel}>Inspection Drop</Text>
             </View>
           </View>
 
@@ -174,24 +166,20 @@ const Dashboard = () => {
           <View style={styles.row}>
             {/* Emission Tons */}
             <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#ffedd5' }]}>
-                <CloudFog color="#fb923c" size={20} />
+              <View style={[styles.iconCircle, { backgroundColor: '#FFF0EE' }]}>
+                <CloudFog color="#FF5C4D" size={22} />
               </View>
-              <View>
-                <Text style={styles.metricValue}>{data.totalEmission.toFixed(1)}</Text>
-                <Text style={styles.metricLabel}>Total Emission Tons</Text>
-              </View>
+              <Text style={styles.metricValue}>{data.totalEmission.toFixed(1)}</Text>
+              <Text style={styles.metricLabel}>Total Emission Tons</Text>
             </View>
 
             {/* Users */}
             <View style={styles.card}>
-              <View style={[styles.iconCircle, { backgroundColor: '#dcfce7' }]}>
-                <Users color="#16a34a" size={20} />
+              <View style={[styles.iconCircle, { backgroundColor: '#F8F9FA' }]}>
+                <Users color="#2D2D2D" size={22} />
               </View>
-              <View>
-                <Text style={styles.metricValue}>{data.totalUsers.toLocaleString()}</Text>
-                <Text style={styles.metricLabel}>Users</Text>
-              </View>
+              <Text style={styles.metricValue}>{data.totalUsers.toLocaleString()}</Text>
+              <Text style={styles.metricLabel}>Users</Text>
             </View>
           </View>
 
@@ -212,11 +200,11 @@ const Dashboard = () => {
                   <View key={index} style={styles.listItem}>
                     <View style={[
                       styles.rankBadge, 
-                      { backgroundColor: rank <= 3 ? color : 'transparent' }
+                      { backgroundColor: rank <= 3 ? color : '#F8F9FA' }
                     ]}>
                       <Text style={[
                         styles.rankText,
-                        { color: rank > 3 ? '#4b5563' : '#fff' }
+                        { color: rank <= 3 ? '#FFFFFF' : '#2D2D2D' }
                       ]}>{rank}</Text>
                     </View>
                     
@@ -246,7 +234,7 @@ const Dashboard = () => {
         {/* Footer Summary */}
         <View style={styles.footerContainer}>
           <View style={styles.footerHeader}>
-            <Calendar color="#6b7280" size={20} />
+            <Calendar color="#2D2D2D" size={20} />
             <Text style={styles.footerDate}>{selectedDate}</Text>
           </View>
           
@@ -254,41 +242,41 @@ const Dashboard = () => {
             <View style={styles.totalValueContainer}>
               <View style={[
                 styles.arrowIconBox,
-                { backgroundColor: comparison.isIncrease ? '#fee2e2' : '#dcfce7' }
+                { backgroundColor: comparison.isIncrease ? '#FFF0EE' : '#F0FFF4' }
               ]}>
                 {comparison.isIncrease ? (
-                  <MoveUp color="#ef4444" size={24} strokeWidth={3} />
+                  <TrendingUp color="#FF5C4D" size={20} strokeWidth={2.5} />
                 ) : (
-                  <MoveDown color="#22c55e" size={24} strokeWidth={3} />
+                  <TrendingDown color="#10B981" size={20} strokeWidth={2.5} />
                 )}
               </View>
               <Text style={[
                 styles.totalValueText,
-                { color: comparison.isIncrease ? '#ef4444' : '#22c55e' }
+                { color: comparison.isIncrease ? '#FF5C4D' : '#10B981' }
               ]}>
                 {data.totalEmission.toFixed(1)}
               </Text>
             </View>
-            <Text style={[
-              styles.totalLabelText,
-              { color: comparison.isIncrease ? '#ef4444' : '#22c55e' }
-            ]}>
-              Tons Total CO2
+            <Text style={styles.totalLabelText}>
+              Tons Total CO₂
             </Text>
           </View>
 
           {comparison.previousMonth && (
             <View style={styles.comparisonRow}>
-              <View style={styles.comparisonBadge}>
+              <View style={[
+                styles.comparisonBadge,
+                { backgroundColor: comparison.isIncrease ? '#FFF0EE' : '#F0FFF4' }
+              ]}>
                 <Text style={[
                   styles.comparisonText,
-                  { color: comparison.isIncrease ? '#dc2626' : '#16a34a' }
+                  { color: comparison.isIncrease ? '#FF5C4D' : '#10B981' }
                 ]}>
                   {comparison.isIncrease ? '↑' : '↓'} {comparison.percent}%
                 </Text>
               </View>
               <Text style={styles.comparisonLabel}>
-                Compared to {comparison.previousMonth}
+                vs {comparison.previousMonth}
               </Text>
             </View>
           )}
@@ -302,7 +290,7 @@ const Dashboard = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6', 
+    backgroundColor: '#F8F9FA', 
   },
   centerContent: {
     justifyContent: 'center',
@@ -311,79 +299,82 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6b7280',
+    color: '#2D2D2D',
+    fontWeight: '500',
   },
   errorText: {
     fontSize: 16,
-    color: '#ef4444',
+    color: '#FF5C4D',
     marginBottom: 16,
+    fontWeight: '600',
   },
   retryButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#FF5C4D',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   retryButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   noDataText: {
     fontSize: 14,
-    color: '#9ca3af',
+    color: '#9CA3AF',
     textAlign: 'center',
     paddingVertical: 20,
   },
   statusBarPlaceholder: {
     height: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#F8F9FA',
   },
   scrollContainer: {
-    padding: 24,
+    padding: 20,
     paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#2D2D2D',
   },
   iconButton: {
     padding: 8,
-    borderRadius: 50,
-  },
-  shadow: {
-    backgroundColor: '#fff',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1.41,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     elevation: 2,
   },
   dateSelector: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   dateText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: '#2D2D2D',
+  },
+  metricsGrid: {
+    marginBottom: 20,
   },
   row: {
     flexDirection: 'row',
@@ -392,51 +383,52 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '48%', 
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
-    height: 140,
-    justifyContent: 'space-between',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 8,
     elevation: 2,
   },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 12,
   },
   metricValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#2D2D2D',
     marginBottom: 4,
   },
   metricLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    lineHeight: 16,
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
   },
   sectionContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 8,
     elevation: 2,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 16,
+    color: '#2D2D2D',
+    marginBottom: 20,
   },
   listContainer: {
     gap: 16,
@@ -447,17 +439,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   rankBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: 12,
     marginTop: 2,
   },
   rankText: {
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 12,
+    fontWeight: '700',
   },
   progressContainer: {
     flex: 1,
@@ -465,20 +457,21 @@ const styles = StyleSheet.create({
   progressLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   barangayName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#4b5563',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2D2D2D',
   },
   barangayValue: {
-    fontSize: 12,
-    color: '#6b7280',
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   progressBarBackground: {
     height: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#F8F9FA',
     borderRadius: 4,
     width: '100%',
     overflow: 'hidden',
@@ -488,71 +481,67 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   footerContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 8,
     elevation: 2,
   },
   footerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    marginBottom: 16,
   },
   footerDate: {
-    fontSize: 18,
-    fontWeight: '300',
-    color: '#6b7280',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6B7280',
     marginLeft: 8,
   },
   totalRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
+    alignItems: 'center',
     marginBottom: 12,
   },
   totalValueContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 12,
   },
   arrowIconBox: {
-    padding: 4,
-    borderRadius: 4,
-    marginRight: 4,
+    padding: 8,
+    borderRadius: 8,
+    marginRight: 8,
   },
   totalValueText: {
-    fontSize: 30,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '700',
   },
   totalLabelText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
-    marginBottom: 4,
-    marginLeft: 8,
+    color: '#6B7280',
   },
   comparisonRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   comparisonBadge: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
     marginRight: 8,
   },
   comparisonText: {
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
   },
   comparisonLabel: {
-    fontSize: 12,
-    color: '#9ca3af',
+    fontSize: 14,
+    color: '#6B7280',
   },
 });
 

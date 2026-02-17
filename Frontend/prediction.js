@@ -14,7 +14,6 @@ export default function PredictionScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch real-time data
   const fetchRealTimeData = async () => {
     try {
       const response = await fetch(API_URL);
@@ -30,17 +29,12 @@ export default function PredictionScreen() {
     }
   };
 
-  // Initial fetch and set up polling
   useEffect(() => {
     fetchRealTimeData();
-    
-    // Poll every 30 seconds for real-time updates
     const interval = setInterval(fetchRealTimeData, 30000);
-    
     return () => clearInterval(interval);
   }, []);
 
-  // Weekly data (7 days) - Using real-time temp as baseline
   const getWeeklyTempData = () => {
     const baseTemp = realTimeData?.temperature || 25;
     return [
@@ -54,7 +48,6 @@ export default function PredictionScreen() {
     ];
   };
 
-  // Weekly emission data based on CO2 levels
   const getWeeklyEmissionData = () => {
     const baseCO2 = realTimeData?.co2 || 440;
     return [
@@ -68,7 +61,6 @@ export default function PredictionScreen() {
     ];
   };
 
-  // Monthly data (4 weeks)
   const getMonthlyTempData = () => {
     const baseTemp = realTimeData?.temperature || 25;
     return [
@@ -89,7 +81,6 @@ export default function PredictionScreen() {
     ];
   };
 
-  // Switch data based on selected tab
   const tempData = selectedTab === 'weekly' ? getWeeklyTempData() : getMonthlyTempData();
   const emissionData = selectedTab === 'weekly' ? getWeeklyEmissionData() : getMonthlyEmissionData();
 
@@ -99,21 +90,19 @@ export default function PredictionScreen() {
 
   const maxEmission = Math.max(...emissionData);
   
-  // Dynamic date range and stats based on tab
   const dateRange = selectedTab === 'weekly' ? 'February 10 - 16, 2026' : 'February 2026';
   const emissionTotal = selectedTab === 'weekly' 
     ? `${(emissionData.reduce((a, b) => a + b, 0) / 1000).toFixed(1)} Tons`
     : `${(emissionData.reduce((a, b) => a + b, 0) / 1000).toFixed(1)} Tons`;
   const emissionChange = selectedTab === 'weekly' ? '-8% vs. Last Week' : '+5% vs. Last Month';
 
-  // Get status color based on air quality
   const getStatusColor = (status) => {
     switch(status?.color) {
-      case 'green': return '#4CAF50';
-      case 'yellow': return '#FFC107';
-      case 'orange': return '#FF9800';
-      case 'red': return '#F44336';
-      default: return '#4CAF50';
+      case 'green': return '#10B981';
+      case 'yellow': return '#FBBF24';
+      case 'orange': return '#F59E0B';
+      case 'red': return '#FF5C4D';
+      default: return '#10B981';
     }
   };
 
@@ -121,7 +110,7 @@ export default function PredictionScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4CAF50" />
+          <ActivityIndicator size="large" color="#FF5C4D" />
           <Text style={styles.loadingText}>Loading real-time data...</Text>
         </View>
       </SafeAreaView>
@@ -132,19 +121,17 @@ export default function PredictionScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
           {selectedTab === 'weekly' ? 'Weekly' : 'Monthly'} AI-Prediction
         </Text>
         <TouchableOpacity onPress={fetchRealTimeData} style={styles.refreshButton}>
-          <Feather name="refresh-cw" size={20} color="#4CAF50" />
+          <Feather name="refresh-cw" size={20} color="#2D2D2D" />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         
-        {/* Real-Time Status Card */}
         {realTimeData && (
           <View style={styles.realTimeCard}>
             <View style={styles.realTimeHeader}>
@@ -153,7 +140,7 @@ export default function PredictionScreen() {
                 <Text style={styles.liveText}>LIVE</Text>
               </View>
               <Text style={styles.lastUpdate}>
-                Last updated: {new Date(realTimeData.timestamp).toLocaleTimeString()}
+                {new Date(realTimeData.timestamp).toLocaleTimeString()}
               </Text>
             </View>
             
@@ -193,7 +180,6 @@ export default function PredictionScreen() {
           </View>
         )}
 
-        {/* Tab Selector */}
         <View style={styles.tabContainer}>
           <TouchableOpacity 
             style={[
@@ -220,19 +206,16 @@ export default function PredictionScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Date Range */}
         <View style={styles.dateCard}>
           <Text style={styles.dateText}>{dateRange}</Text>
         </View>
 
-        {/* Temperature Forecast Card */}
         <View style={styles.forecastCard}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Temperature Forecast</Text>
             <Text style={styles.weatherIcon}>☀️</Text>
           </View>
 
-          {/* Temperature Chart */}
           <View style={styles.chartContainer}>
             <View style={styles.yAxis}>
               <Text style={styles.yAxisLabel}>{Math.ceil(maxTemp + 2)}</Text>
@@ -243,7 +226,6 @@ export default function PredictionScreen() {
             </View>
 
             <View style={styles.chartArea}>
-              {/* Temperature Area Chart */}
               <View style={styles.areaChartRow}>
                 {tempData.map((item, index) => {
                   const heightPercent = ((item.temp - minTemp) / (maxTemp - minTemp)) * 100;
@@ -261,7 +243,6 @@ export default function PredictionScreen() {
                 })}
               </View>
 
-              {/* X-axis labels */}
               <View style={styles.xAxis}>
                 {tempData.map((item, index) => (
                   <Text key={index} style={styles.xAxisLabel}>{item.day}</Text>
@@ -270,21 +251,18 @@ export default function PredictionScreen() {
             </View>
           </View>
 
-          {/* Average Temperature */}
           <View style={styles.avgTempContainer}>
             <Text style={styles.avgTempLabel}>Avg Temp: </Text>
             <Text style={styles.avgTempValue}>{avgTemp} °C</Text>
           </View>
         </View>
 
-        {/* Emission Card */}
         <View style={styles.emissionCard}>
           <View style={styles.emissionHeader}>
             <Text style={styles.emissionTitle}>Est. CO₂: <Text style={styles.emissionValue}>{emissionTotal}</Text></Text>
           </View>
           <Text style={styles.emissionChange}>{emissionChange}</Text>
 
-          {/* Emission Prediction Chart */}
           <Text style={styles.chartSubtitle}>CO₂ Emission Prediction (ppm)</Text>
           <View style={styles.emissionChartContainer}>
             <View style={styles.emissionYAxis}>
@@ -309,7 +287,6 @@ export default function PredictionScreen() {
           </View>
         </View>
 
-        {/* AI-Driven Insights */}
         <View style={styles.insightsCard}>
           <Text style={styles.insightsTitle}>🤖 AI-Driven Insights</Text>
           <View style={styles.insightsList}>
@@ -320,7 +297,7 @@ export default function PredictionScreen() {
               • Temperature is {realTimeData?.temperature > 26 ? 'above' : 'within'} comfortable range
             </Text>
             <Text style={styles.insightText}>
-              • Humidity at {realTimeData?.humidity.toFixed(0)}% - {realTimeData?.humidity > 70 ? 'High moisture level detected' : 'Normal moisture levels'}
+              • Humidity at {realTimeData?.humidity.toFixed(0)}% - {realTimeData?.humidity > 70 ? 'High moisture detected' : 'Normal levels'}
             </Text>
             <Text style={styles.insightText}>
               • {selectedTab === 'weekly' ? 'Weekly' : 'Monthly'} trend shows {emissionChange.includes('-') ? 'improvement' : 'increase'} in emissions
@@ -336,7 +313,7 @@ export default function PredictionScreen() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#F5F5F5' 
+    backgroundColor: '#F8F9FA' 
   },
   loadingContainer: {
     flex: 1,
@@ -344,9 +321,10 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
-    color: '#666'
+    color: '#2D2D2D',
+    fontWeight: '500'
   },
   header: { 
     flexDirection: 'row', 
@@ -354,112 +332,108 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     paddingHorizontal: 20,
     paddingTop: 50,
-    paddingBottom: 15,
-    backgroundColor: '#FFF'
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF'
   },
   headerTitle: { 
     fontSize: 24, 
     fontWeight: '700', 
-    color: '#000' 
+    color: '#2D2D2D' 
   },
   refreshButton: {
     padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F0F0F0'
+    borderRadius: 10,
+    backgroundColor: '#F8F9FA'
   },
   content: { 
     paddingHorizontal: 20, 
     paddingTop: 20,
     paddingBottom: 30 
   },
-
-  // Real-Time Status Card
   realTimeCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     padding: 20,
-    borderRadius: 15,
+    borderRadius: 16,
     marginBottom: 20,
-    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3
   },
   realTimeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15
+    marginBottom: 16
   },
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    gap: 8
   },
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF3B30'
+    backgroundColor: '#FF5C4D'
   },
   liveText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FF3B30',
+    color: '#FF5C4D',
     letterSpacing: 1
   },
   lastUpdate: {
     fontSize: 11,
-    color: '#999'
+    color: '#9CA3AF'
   },
   realTimeMetrics: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 15
+    marginBottom: 16
   },
   metricBox: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 10
+    paddingVertical: 12
   },
   metricLabel: {
     fontSize: 12,
-    color: '#666',
-    marginBottom: 5
+    color: '#6B7280',
+    marginBottom: 6
   },
   metricValue: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
-    color: '#000'
+    color: '#2D2D2D'
   },
   metricUnit: {
     fontSize: 12,
-    color: '#999',
+    color: '#9CA3AF',
     marginTop: 2
   },
   statusBadge: {
-    padding: 12,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: 12,
     alignItems: 'center'
   },
   statusLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#FFFFFF',
     marginBottom: 2
   },
   statusMessage: {
     fontSize: 13,
-    color: '#FFF',
-    opacity: 0.9
+    color: '#FFFFFF',
+    opacity: 0.95
   },
-
-  // Error Card
   errorCard: {
-    backgroundColor: '#FFF3CD',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+    backgroundColor: '#FEF3C7',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
@@ -467,71 +441,75 @@ const styles = StyleSheet.create({
   errorText: {
     flex: 1,
     fontSize: 14,
-    color: '#856404'
+    color: '#92400E'
   },
   retryButton: {
-    backgroundColor: '#FFC107',
-    paddingHorizontal: 15,
+    backgroundColor: '#FBBF24',
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8
   },
   retryText: {
-    color: '#000',
+    color: '#78350F',
     fontWeight: '600'
   },
-
-  // Tab Container
   tabContainer: { 
     flexDirection: 'row', 
-    gap: 10,
+    gap: 12,
     marginBottom: 20
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     alignItems: 'center'
   },
   tabInactive: {
-    backgroundColor: '#E8E8E8'
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB'
   },
   tabActive: {
-    backgroundColor: '#4CAF50'
+    backgroundColor: '#FF5C4D'
   },
   tabTextInactive: {
-    color: '#666',
-    fontSize: 13,
-    fontWeight: '500'
-  },
-  tabTextActive: {
-    color: '#FFF',
+    color: '#6B7280',
     fontSize: 13,
     fontWeight: '600'
   },
-
-  // Date Card
+  tabTextActive: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700'
+  },
   dateCard: {
-    backgroundColor: '#FFF',
-    padding: 20,
-    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    borderRadius: 14,
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     elevation: 1
   },
   dateText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#000'
+    color: '#2D2D2D'
   },
-
-  // Temperature Forecast Card
   forecastCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     padding: 20,
-    borderRadius: 15,
-    marginBottom: 15,
-    elevation: 1
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2
   },
   cardHeader: {
     flexDirection: 'row',
@@ -541,18 +519,16 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#000'
+    fontWeight: '700',
+    color: '#2D2D2D'
   },
   weatherIcon: {
     fontSize: 28
   },
-
-  // Chart Container
   chartContainer: {
     flexDirection: 'row',
     height: 180,
-    marginBottom: 10
+    marginBottom: 12
   },
   yAxis: {
     justifyContent: 'space-between',
@@ -561,7 +537,7 @@ const styles = StyleSheet.create({
   },
   yAxisLabel: {
     fontSize: 11,
-    color: '#999'
+    color: '#9CA3AF'
   },
   chartArea: {
     flex: 1
@@ -570,7 +546,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 3
+    gap: 4
   },
   barContainer: {
     flex: 1,
@@ -580,12 +556,12 @@ const styles = StyleSheet.create({
   },
   tempLabel: {
     fontSize: 10,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 4,
     fontWeight: '600'
   },
   tempBar: {
-    backgroundColor: '#B3E5FC',
+    backgroundColor: '#FF9890',
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
     width: '100%'
@@ -597,62 +573,60 @@ const styles = StyleSheet.create({
   },
   xAxisLabel: {
     fontSize: 11,
-    color: '#999',
+    color: '#9CA3AF',
     flex: 1,
     textAlign: 'center'
   },
-
-  // Average Temperature
   avgTempContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 15
+    marginTop: 16
   },
   avgTempLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000'
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2D2D2D'
   },
   avgTempValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#4CAF50'
+    color: '#FF5C4D'
   },
-
-  // Emission Card
   emissionCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     padding: 20,
-    borderRadius: 15,
-    marginBottom: 15,
-    elevation: 1
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2
   },
   emissionHeader: {
-    marginBottom: 5
+    marginBottom: 4
   },
   emissionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000'
+    color: '#2D2D2D'
   },
   emissionValue: {
-    color: '#4CAF50',
+    color: '#FF5C4D',
     fontWeight: '700'
   },
   emissionChange: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 20
   },
   chartSubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#000',
-    marginBottom: 15
+    color: '#2D2D2D',
+    marginBottom: 16
   },
-
-  // Emission Chart
   emissionChartContainer: {
     flexDirection: 'row',
     height: 140
@@ -664,7 +638,7 @@ const styles = StyleSheet.create({
   },
   emissionYLabel: {
     fontSize: 11,
-    color: '#999'
+    color: '#9CA3AF'
   },
   emissionBarsArea: {
     flex: 1,
@@ -680,37 +654,39 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   emissionBar: {
-    backgroundColor: '#C8E6C9',
+    backgroundColor: '#FFB6B1',
     width: '100%',
-    borderRadius: 3
+    borderRadius: 4
   },
   emissionValueLabel: {
     fontSize: 10,
-    color: '#666',
+    color: '#6B7280',
     marginTop: 4,
     fontWeight: '600'
   },
-
-  // Insights Card
   insightsCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     padding: 20,
-    borderRadius: 15,
-    marginBottom: 15,
-    elevation: 1
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2
   },
   insightsTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 15
+    fontWeight: '700',
+    color: '#2D2D2D',
+    marginBottom: 16
   },
   insightsList: {
-    gap: 10
+    gap: 12
   },
   insightText: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     lineHeight: 20
   }
 });
