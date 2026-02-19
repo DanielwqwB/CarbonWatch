@@ -1,7 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, RefreshControl, Dimensions, Alert,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-chart-kit';
@@ -36,12 +43,10 @@ const formatCO2Index = (val) => {
 
 const SEVERITY_RANK = { 'VERY HIGH': 4, HIGH: 3, MODERATE: 2, LOW: 1, NORMAL: 0 };
 
-// ── PDF HTML builder ─────────────────────────────────────────────────────────
+// ── PDF HTML builder ───────────────────────────────────────────────────────────
 const buildPDFHtml = ({
-  periodLabel, reportType, filtered,
-  top3, carbonCounts, avgCO2Index,
-  avgTemp, avgHumid, veryHighCount,
-  trendUp, trendDiff,
+  periodLabel, reportType, filtered, top3, carbonCounts,
+  avgCO2Index, avgTemp, avgHumid, veryHighCount, trendUp, trendDiff,
 }) => {
   const generatedAt  = new Date().toLocaleString();
   const totalSensors = filtered.length;
@@ -51,10 +56,17 @@ const buildPDFHtml = ({
     const color = getCarbonColor(level);
     return `
       <tr>
-        <td><span class="dot" style="background:${color}"></span>${level}</td>
-        <td class="center">${count}</td>
-        <td><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div></td>
-        <td class="center">${pct}%</td>
+        <td style="padding:8px 12px;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:8px;"></span>
+          ${level}
+        </td>
+        <td style="padding:8px 12px;text-align:center;">${count}</td>
+        <td style="padding:8px 12px;">
+          <div style="background:#eee;border-radius:4px;height:8px;width:100%;">
+            <div style="background:${color};width:${pct}%;height:8px;border-radius:4px;"></div>
+          </div>
+        </td>
+        <td style="padding:8px 12px;text-align:right;">${pct}%</td>
       </tr>`;
   }).join('');
 
@@ -62,123 +74,96 @@ const buildPDFHtml = ({
     const color = getCarbonColor(loc.carbon_level);
     return `
       <tr>
-        <td class="center rank">${i + 1}</td>
-        <td>${loc.name}</td>
-        <td><span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}">${loc.carbon_level || '—'}</span></td>
-        <td class="center mono">${loc.co2Display}</td>
+        <td style="padding:8px 12px;text-align:center;font-weight:700;">${i + 1}</td>
+        <td style="padding:8px 12px;">${loc.name}</td>
+        <td style="padding:8px 12px;">
+          <span style="background:${color};color:#fff;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">
+            ${loc.carbon_level || '—'}
+          </span>
+        </td>
+        <td style="padding:8px 12px;text-align:right;font-weight:700;">${loc.co2Display}</td>
       </tr>`;
   }).join('');
 
   const insights = [];
-  if (top3[0]) insights.push(`<li><b>${top3[0].name}</b> has the highest carbon level${top3[0].carbon_level ? ` (<span style="color:${getCarbonColor(top3[0].carbon_level)};font-weight:700">${top3[0].carbon_level}</span>)` : ''} — priority inspection recommended.</li>`);
-  if (top3[1]) insights.push(`<li><b>${top3[1].name}</b> is 2nd${top3[1].carbon_level ? ` at <span style="color:${getCarbonColor(top3[1].carbon_level)};font-weight:700">${top3[1].carbon_level}</span>` : ''}. Consider ventilation improvements.</li>`);
-  if (veryHighCount > 0) insights.push(`<li><b style="color:#D64545">${veryHighCount} sensor${veryHighCount > 1 ? 's' : ''}</b> recorded at VERY HIGH level — <b>immediate action required.</b></li>`);
-  insights.push(`<li>Avg temperature <b>${avgTemp}°C</b>, avg humidity <b>${avgHumid}%</b> across <b>${totalSensors}</b> active sensors.</li>`);
+  if (top3[0]) insights.push(`<li>${top3[0].name} has the highest carbon level${top3[0].carbon_level ? ` (${top3[0].carbon_level})` : ''} — priority inspection recommended.</li>`);
+  if (top3[1]) insights.push(`<li>${top3[1].name} is 2nd${top3[1].carbon_level ? ` at ${top3[1].carbon_level}` : ''}. Consider ventilation improvements.</li>`);
+  if (veryHighCount > 0) insights.push(`<li>${veryHighCount} sensor${veryHighCount > 1 ? 's' : ''} recorded at VERY HIGH level — immediate action required.</li>`);
+  insights.push(`<li>Avg temperature ${avgTemp}°C, avg humidity ${avgHumid}% across ${totalSensors} active sensors.</li>`);
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #1F2937; padding: 36px; font-size: 12px; line-height: 1.5; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #FF5C4D; padding-bottom: 18px; margin-bottom: 24px; }
-  .header h1 { font-size: 24px; font-weight: 800; color: #FF5C4D; }
-  .header p  { font-size: 12px; color: #6B7280; margin-top: 2px; }
-  .period-badge { background: #FF5C4D; color: #fff; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: inline-block; margin-top: 8px; }
-  .header-right { text-align: right; font-size: 11px; color: #9CA3AF; line-height: 1.8; }
-  .section-title { font-size: 14px; font-weight: 700; color: #2D2D2D; margin: 24px 0 12px; border-left: 4px solid #FF5C4D; padding-left: 10px; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 4px; }
-  .kpi-card { background: #F8F9FA; border-radius: 10px; padding: 14px; text-align: center; border: 1px solid #E5E7EB; }
-  .kpi-value { font-size: 20px; font-weight: 800; }
-  .kpi-label { font-size: 9px; color: #6B7280; margin-top: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-  .kv-red    { color: #D64545; }
-  .kv-green  { color: #10B981; }
-  .kv-blue   { color: #3B82F6; }
-  .kv-orange { color: #F97316; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th { background: #F3F4F6; font-weight: 700; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; color: #6B7280; padding: 8px 10px; text-align: left; }
-  td { padding: 9px 10px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
-  tr:last-child td { border-bottom: none; }
-  .center { text-align: center; }
-  .mono { font-family: monospace; font-size: 11px; }
-  .rank { font-weight: 800; font-size: 14px; color: #FF5C4D; }
-  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
-  .badge { padding: 2px 7px; border-radius: 5px; font-size: 9px; font-weight: 700; white-space: nowrap; }
-  .bar-track { background: #E5E7EB; border-radius: 4px; height: 7px; overflow: hidden; }
-  .bar-fill  { height: 100%; border-radius: 4px; }
-  .trend-chip { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
-  .trend-up   { background: #FFF0EE; color: #FF5C4D; }
-  .trend-down { background: #F0FFF4; color: #10B981; }
-  .alert-banner { background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; }
-  .alert-banner span { color: #D64545; font-weight: 700; font-size: 12px; }
-  .insights li { margin-bottom: 9px; line-height: 1.6; padding-left: 2px; }
-  .footer { margin-top: 36px; padding-top: 12px; border-top: 1px solid #E5E7EB; font-size: 9px; color: #9CA3AF; display: flex; justify-content: space-between; }
-</style>
-</head>
-<body>
-
-<div class="header">
-  <div>
-    <h1>ENVI Analytics</h1>
-    <p>Environmental Sensor Monitoring Report</p>
-    <div class="period-badge">${periodLabel} &nbsp;·&nbsp; ${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report</div>
-  </div>
-  <div class="header-right">
-    Generated: ${generatedAt}<br/>
-    Total Sensors: ${totalSensors}<br/>
-    Source: CarbonWatch
-  </div>
-</div>
-
-${veryHighCount > 0 ? `<div class="alert-banner"><span>⚠️ &nbsp;${veryHighCount} sensor${veryHighCount > 1 ? 's' : ''} at VERY HIGH carbon level — Immediate action required</span></div>` : ''}
-
-<div class="section-title">Summary Metrics</div>
-<div class="kpi-grid">
-  <div class="kpi-card"><div class="kpi-value kv-green">${avgCO2Index}</div><div class="kpi-label">Avg CO2 Index</div></div>
-  <div class="kpi-card"><div class="kpi-value kv-orange">${avgTemp}°C</div><div class="kpi-label">Avg Temperature</div></div>
-  <div class="kpi-card"><div class="kpi-value kv-blue">${avgHumid}%</div><div class="kpi-label">Avg Humidity</div></div>
-  <div class="kpi-card"><div class="kpi-value kv-red">${veryHighCount}</div><div class="kpi-label">Very High Alerts</div></div>
-</div>
-
-<div class="section-title">
-  Top Locations by Carbon Level
-  <span class="trend-chip ${trendUp ? 'trend-up' : 'trend-down'}">${trendUp ? '↑' : '↓'} ${trendDiff}% gap #1 vs #2</span>
-</div>
-<table>
-  <thead><tr><th class="center" style="width:46px">Rank</th><th>Location</th><th>Carbon Level</th><th class="center">CO2 Index</th></tr></thead>
-  <tbody>${topRows || '<tr><td colspan="4" class="center" style="color:#9CA3AF;padding:18px">No data available</td></tr>'}</tbody>
-</table>
-
-<div class="section-title">Carbon Level Breakdown</div>
-<table>
-  <thead><tr><th style="width:130px">Level</th><th class="center" style="width:60px">Count</th><th>Distribution</th><th class="center" style="width:50px">%</th></tr></thead>
-  <tbody>${carbonRows}</tbody>
-</table>
-
-<div class="section-title">Actionable Insights</div>
-<ul class="insights" style="padding-left:18px">${insights.join('\n')}</ul>
-
-<div class="footer">
-  <span>ENVI Analytics — Auto-generated report</span>
-  <span>${periodLabel} &nbsp;·&nbsp; ${reportType} &nbsp;·&nbsp; ${totalSensors} sensors monitored</span>
-</div>
-
-</body>
-</html>`;
+  return `
+    <!DOCTYPE html><html><head><meta charset="UTF-8"/>
+    <style>
+      body { font-family: -apple-system, sans-serif; margin: 0; padding: 0; color: #1F2937; background: #F9FAFB; }
+      .page { max-width: 800px; margin: 0 auto; padding: 40px 32px; }
+      .header { background: linear-gradient(135deg,#FF5C4D,#ff8a7a); color: #fff; padding: 32px; border-radius: 16px; margin-bottom: 24px; }
+      .header h1 { margin:0 0 4px; font-size:26px; } .header p { margin:0; opacity:.85; font-size:14px; }
+      .meta-row { display:flex; gap:12px; margin-top:16px; flex-wrap:wrap; }
+      .meta-pill { background:rgba(255,255,255,.2); padding:4px 14px; border-radius:20px; font-size:12px; }
+      .alert-box { background:#FEF2F2; border:1.5px solid #FECACA; border-radius:12px; padding:14px 18px; margin-bottom:20px; color:#B91C1C; font-weight:600; }
+      .section { background:#fff; border-radius:14px; padding:24px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+      .section h2 { margin:0 0 16px; font-size:17px; color:#111827; }
+      .metrics { display:flex; gap:16px; flex-wrap:wrap; }
+      .metric { flex:1; min-width:120px; background:#F9FAFB; border-radius:12px; padding:16px; text-align:center; }
+      .metric .val { font-size:26px; font-weight:800; color:#FF5C4D; }
+      .metric .lbl { font-size:12px; color:#6B7280; margin-top:4px; }
+      table { width:100%; border-collapse:collapse; }
+      th { background:#F3F4F6; padding:10px 12px; text-align:left; font-size:12px; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; }
+      tr:nth-child(even) { background:#FAFAFA; }
+      ul { padding-left:20px; } li { margin-bottom:10px; line-height:1.6; font-size:14px; }
+      .footer { text-align:center; font-size:11px; color:#9CA3AF; margin-top:32px; padding-top:16px; border-top:1px solid #E5E7EB; }
+    </style></head><body><div class="page">
+      <div class="header">
+        <h1>ENVI Analytics</h1>
+        <p>Environmental Sensor Monitoring Report</p>
+        <div class="meta-row">
+          <span class="meta-pill">${periodLabel}</span>
+          <span class="meta-pill">${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report</span>
+          <span class="meta-pill">Generated: ${generatedAt}</span>
+          <span class="meta-pill">Total Sensors: ${totalSensors}</span>
+        </div>
+      </div>
+      ${veryHighCount > 0 ? `<div class="alert-box">⚠️ ${veryHighCount} sensor${veryHighCount > 1 ? 's' : ''} at VERY HIGH carbon level — Immediate action required</div>` : ''}
+      <div class="section">
+        <h2>Summary Metrics</h2>
+        <div class="metrics">
+          <div class="metric"><div class="val">${avgCO2Index}</div><div class="lbl">Avg CO₂ Index</div></div>
+          <div class="metric"><div class="val">${avgTemp}°C</div><div class="lbl">Avg Temperature</div></div>
+          <div class="metric"><div class="val">${avgHumid}%</div><div class="lbl">Avg Humidity</div></div>
+          <div class="metric"><div class="val" style="color:#D64545">${veryHighCount}</div><div class="lbl">Very High Alerts</div></div>
+        </div>
+      </div>
+      <div class="section">
+        <h2>Top Locations by Carbon Level</h2>
+        <table><thead><tr><th>#</th><th>Location</th><th>Carbon Level</th><th>CO₂ Index</th></tr></thead>
+        <tbody>${topRows || '<tr><td colspan="4" style="text-align:center;padding:16px;color:#9CA3AF;">No data available</td></tr>'}</tbody></table>
+      </div>
+      <div class="section">
+        <h2>Carbon Level Breakdown</h2>
+        <table><thead><tr><th>Level</th><th>Count</th><th>Distribution</th><th>%</th></tr></thead>
+        <tbody>${carbonRows}</tbody></table>
+      </div>
+      <div class="section">
+        <h2>Actionable Insights</h2>
+        <ul>${insights.join('\n')}</ul>
+      </div>
+      <div class="footer">ENVI Analytics — Auto-generated report · ${periodLabel} · ${reportType} · ${totalSensors} sensors monitored</div>
+    </div></body></html>`;
 };
 
+// ── Main Component ─────────────────────────────────────────────────────────────
 export default function Reports() {
-  const [loading, setLoading]               = useState(true);
-  const [refreshing, setRefreshing]         = useState(false);
-  const [downloading, setDownloading]       = useState(false);
-  const [sensorList, setSensorList]         = useState([]);
-  const [dataList, setDataList]             = useState([]);
-  const [earliestDate, setEarliestDate]     = useState(null);
-  const [reportType, setReportType]         = useState('monthly');
-  const [calendarVisible, setCalendarVisible] = useState(false);
-  const [selected, setSelected]             = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [refreshing,      setRefreshing]       = useState(false);
+  const [downloading,     setDownloading]      = useState(false);
+  const [sensorList,      setSensorList]       = useState([]);
+  const [dataList,        setDataList]         = useState([]);
+  const [earliestDate,    setEarliestDate]     = useState(null);
+  const [reportType,      setReportType]       = useState('monthly');
+  const [calendarVisible, setCalendarVisible]  = useState(false);
+  const [selected,        setSelected]         = useState(null);
 
+  // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchAllData = async (isInitialLoad = false) => {
     try {
       if (isInitialLoad) setLoading(true);
@@ -219,27 +204,27 @@ export default function Reports() {
     if (selected) setSelected({ year: selected.year, month: selected.month });
   };
 
+  // ── Filtered data ────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    if (!sensorList.length) return [];
+    if (!sensorList.length || !selected) return [];
     const sensorMap = {};
     sensorList.forEach(s => { sensorMap[s.sensor_id] = s; });
 
-    const periodRecords = selected
-      ? dataList.filter(d => {
-          if (!d.recorded_at) return false;
-          const dt = new Date(d.recorded_at);
-          if (reportType === 'monthly') {
-            return dt.getFullYear() === selected.year && dt.getMonth() === selected.month;
-          } else {
-            if (!selected.startDate || !selected.endDate) {
-              return dt.getFullYear() === selected.year && dt.getMonth() === selected.month;
-            }
-            const start = new Date(selected.startDate); start.setHours(0, 0, 0, 0);
-            const end   = new Date(selected.endDate);   end.setHours(23, 59, 59, 999);
-            return dt >= start && dt <= end;
-          }
-        })
-      : dataList;
+    const periodRecords = dataList.filter(d => {
+      if (!d.recorded_at) return false;
+      const dt = new Date(d.recorded_at);
+      if (reportType === 'monthly') {
+        return dt.getFullYear() === selected.year && dt.getMonth() === selected.month;
+      } else {
+        // weekly — fall back to full month if week range not yet set
+        if (!selected.startDate || !selected.endDate) {
+          return dt.getFullYear() === selected.year && dt.getMonth() === selected.month;
+        }
+        const start = new Date(selected.startDate); start.setHours(0, 0, 0, 0);
+        const end   = new Date(selected.endDate);   end.setHours(23, 59, 59, 999);
+        return dt >= start && dt <= end;
+      }
+    });
 
     const latestMap = {};
     periodRecords.forEach(d => {
@@ -255,6 +240,7 @@ export default function Reports() {
     }));
   }, [sensorList, dataList, selected, reportType]);
 
+  // ── Derived stats ────────────────────────────────────────────────────────────
   const hasData = filtered.length > 0;
 
   const avgOf = (key) => {
@@ -294,16 +280,14 @@ export default function Reports() {
 
   const trendUp   = top3.length >= 2 ? top3[0].co2 > top3[1].co2 : false;
   const trendDiff = top3.length >= 2 && top3[1].co2 !== 0
-    ? Math.abs(((top3[0].co2 - top3[1].co2) / top3[1].co2) * 100).toFixed(1)
-    : '0';
+    ? Math.abs(((top3[0].co2 - top3[1].co2) / top3[1].co2) * 100).toFixed(1) : '0';
 
   const chartData = {
-    labels: ['Normal', 'Low', 'Mod', 'High', 'V.High'],
+    labels:   ['Normal', 'Low', 'Mod', 'High', 'V.High'],
     datasets: [{ data: [carbonCounts['NORMAL'], carbonCounts['LOW'], carbonCounts['MODERATE'], carbonCounts['HIGH'], carbonCounts['VERY HIGH']] }],
   };
 
-  const periodLabel = !selected
-    ? 'Loading…'
+  const periodLabel = !selected ? 'Loading…'
     : reportType === 'monthly'
       ? `${MONTHS[selected.month]} ${selected.year}`
       : selected.startDate && selected.endDate
@@ -314,7 +298,7 @@ export default function Reports() {
   const avgTemp       = avgOf('temperature_c').toFixed(1);
   const avgHumid      = avgOf('humidity').toFixed(1);
 
-  // ── Download handler ───────────────────────────────────────────────────────
+  // ── PDF download ─────────────────────────────────────────────────────────────
   const handleDownload = async () => {
     if (!hasData) {
       Alert.alert('No Data', 'There is no data to export for the selected period.');
@@ -322,18 +306,11 @@ export default function Reports() {
     }
     try {
       setDownloading(true);
-
       const html = buildPDFHtml({
-        periodLabel, reportType, filtered,
-        top3, carbonCounts, avgCO2Index,
-        avgTemp, avgHumid, veryHighCount,
-        trendUp, trendDiff,
+        periodLabel, reportType, filtered, top3, carbonCounts,
+        avgCO2Index, avgTemp, avgHumid, veryHighCount, trendUp, trendDiff,
       });
-
-      // Generate PDF file
       const { uri } = await Print.printToFileAsync({ html, base64: false });
-
-      // Share / save the file
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(uri, {
@@ -352,6 +329,7 @@ export default function Reports() {
     }
   };
 
+  // ── Loading ───────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={styles.center}>
@@ -361,39 +339,32 @@ export default function Reports() {
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      {/* Header */}
+
+      {/* ── Header ── */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reporting</Text>
         <TouchableOpacity
-          style={[styles.downloadBtn, downloading && styles.downloadBtnDisabled]}
           onPress={handleDownload}
-          disabled={downloading}
+          style={[styles.downloadBtn, (!hasData || downloading) && styles.downloadBtnDisabled]}
+          disabled={!hasData || downloading}
         >
           {downloading
             ? <ActivityIndicator size="small" color="#FF5C4D" />
-            : <Ionicons name="download-outline" size={24} color="#FF5C4D" />
+            : <Ionicons name="download-outline" size={22} color="#FF5C4D" />
           }
         </TouchableOpacity>
       </View>
 
-      <CalendarPicker
-        visible={calendarVisible}
-        onClose={() => setCalendarVisible(false)}
-        mode={reportType}
-        selected={selected}
-        onSelect={setSelected}
-        earliestDate={earliestDate}
-      />
-
+      {/* ── Scrollable content ── */}
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 32 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF5C4D']} />
-        }
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Toggle */}
+        {/* Toggle monthly / weekly */}
         <View style={styles.toggleContainer}>
           {[{ key: 'monthly', label: 'Monthly' }, { key: 'weekly', label: 'Weekly' }].map(({ key, label }) => (
             <TouchableOpacity
@@ -408,21 +379,27 @@ export default function Reports() {
           ))}
         </View>
 
-        {/* Date Selector */}
-        <TouchableOpacity style={styles.dateCard} onPress={() => setCalendarVisible(true)}>
+        {/* Date selector */}
+        <TouchableOpacity
+          style={styles.dateCard}
+          onPress={() => {
+            console.log('Calendar open pressed, earliestDate:', earliestDate, 'calendarVisible:', calendarVisible);
+            setCalendarVisible(true);
+          }}
+        >
           <View style={styles.rowCenter}>
-            <MaterialCommunityIcons name="calendar-month" size={20} color="#FF5C4D" />
+            <Ionicons name="calendar-outline" size={18} color="#FF5C4D" />
             <Text style={styles.dateText}>{periodLabel}</Text>
           </View>
-          <View style={styles.rowCenter}>
-            <Text style={styles.sensorCountSmall}>{hasData ? `${filtered.length} sensors` : 'No data'}</Text>
-            <Ionicons name="chevron-down" size={18} color="#9CA3AF" style={{ marginLeft: 4 }} />
-          </View>
+          <Text style={styles.sensorCountSmall}>
+            {hasData ? `${filtered.length} sensors` : 'No data'}
+          </Text>
         </TouchableOpacity>
 
+        {/* No data state */}
         {!hasData ? (
           <View style={styles.noDataCard}>
-            <MaterialCommunityIcons name="calendar-remove-outline" size={48} color="#D1D5DB" />
+            <MaterialCommunityIcons name="database-off-outline" size={48} color="#E5E7EB" />
             <Text style={styles.noDataTitle}>No readings in {periodLabel}</Text>
             <Text style={styles.noDataSub}>
               {reportType === 'weekly'
@@ -443,54 +420,63 @@ export default function Reports() {
           </View>
         ) : (
           <>
-            {/* Summary Card */}
+            {/* Summary card */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Carbon Emission Summary</Text>
+              <Text style={styles.cardSubtitle}>
+                CO2 · {avgCO2Index} Avg CO₂ Index · {filtered.length} sensors · {periodLabel}
+              </Text>
+
               <View style={styles.summaryTopRow}>
                 <View style={styles.iconCircle}>
-                  <MaterialCommunityIcons name="leaf" size={36} color="#10B981" />
-                  <View style={styles.co2Badge}><Text style={styles.co2Text}>CO2</Text></View>
+                  <MaterialCommunityIcons name="molecule-co2" size={28} color="#10B981" />
+                  <View style={styles.co2Badge}>
+                    <Text style={styles.co2Text}>CO₂</Text>
+                  </View>
                 </View>
                 <View style={styles.statsContainer}>
                   <Text style={styles.bigNumber}>{avgCO2Index}</Text>
-                  <Text style={styles.unitText}>Avg CO₂ Index · {filtered.length} sensors · {periodLabel}</Text>
+                  <Text style={styles.unitText}>Avg CO₂ Index</Text>
                   <View style={styles.trendRow}>
-                    <MaterialCommunityIcons
-                      name={trendUp ? 'triangle' : 'triangle-down'}
-                      size={12} color={trendUp ? '#FF5C4D' : '#10B981'}
+                    <Ionicons
+                      name={trendUp ? 'trending-up' : 'trending-down'}
+                      size={16}
+                      color={trendUp ? '#EF4444' : '#10B981'}
                     />
-                    <Text style={[styles.trendText, { color: trendUp ? '#FF5C4D' : '#10B981' }]}>
+                    <Text style={[styles.trendText, { color: trendUp ? '#EF4444' : '#10B981' }]}>
                       {trendDiff}% gap (#1 vs #2)
                     </Text>
                   </View>
                 </View>
               </View>
+
               <View style={styles.divider} />
+
               {top3.length === 0
                 ? <Text style={styles.emptyText}>No barangay data</Text>
                 : top3.map((loc, i) => (
-                    <View key={i} style={styles.locationRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.locName}>{loc.name}</Text>
-                        {loc.carbon_level && (
-                          <Text style={[styles.locLevel, { color: getCarbonColor(loc.carbon_level) }]}>
-                            {loc.carbon_level}
-                          </Text>
-                        )}
-                      </View>
-                      <Text style={styles.locValue}>Index: {loc.co2Display}</Text>
+                  <View key={i} style={styles.locationRow}>
+                    <View>
+                      <Text style={styles.locName}>{loc.name}</Text>
+                      {loc.carbon_level && (
+                        <Text style={[styles.locLevel, { color: getCarbonColor(loc.carbon_level) }]}>
+                          {loc.carbon_level}
+                        </Text>
+                      )}
                     </View>
-                  ))
+                    <Text style={styles.locValue}>Index: {loc.co2Display}</Text>
+                  </View>
+                ))
               }
             </View>
 
-            {/* Carbon Level Breakdown */}
+            {/* Carbon level breakdown */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Carbon Level Breakdown</Text>
               <Text style={styles.cardSubtitle}>Sensor count — {periodLabel}</Text>
               {Object.entries(carbonCounts).map(([level, count]) => {
                 const color = getCarbonColor(level);
-                const pct   = filtered.length > 0 ? Math.round((count / filtered.length) * 100) : 0;
+                const pct   = filtered.length > 0 ? (count / filtered.length) * 100 : 0;
                 return (
                   <View key={level} style={styles.breakdownRow}>
                     <View style={styles.breakdownLeft}>
@@ -506,14 +492,14 @@ export default function Reports() {
               })}
             </View>
 
-            {/* Bar Chart */}
+            {/* Bar chart */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Sensors per Carbon Level</Text>
               <Text style={styles.cardSubtitle}>{periodLabel}</Text>
               <View style={styles.chartContainer}>
                 <BarChart
                   data={chartData}
-                  width={screenWidth - 64}
+                  width={screenWidth - 72}
                   height={200}
                   chartConfig={{
                     backgroundColor: '#FFFFFF',
@@ -532,7 +518,7 @@ export default function Reports() {
               </View>
             </View>
 
-            {/* Actionable Insights */}
+            {/* Actionable insights */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Actionable Insights</Text>
               <View style={styles.insightList}>
@@ -541,7 +527,7 @@ export default function Reports() {
                     <Text style={styles.bulletPoint}>•</Text>
                     <Text style={styles.insightText}>
                       <Text style={{ fontWeight: '700' }}>{top3[0].name}</Text> has the highest carbon level
-                      {top3[0].carbon_level ? <Text style={{ fontWeight: '700', color: getCarbonColor(top3[0].carbon_level) }}> ({top3[0].carbon_level})</Text> : null}
+                      {top3[0].carbon_level ? <Text> ({top3[0].carbon_level})</Text> : null}
                       {' '}— priority inspection recommended.
                     </Text>
                   </View>
@@ -551,8 +537,8 @@ export default function Reports() {
                     <Text style={styles.bulletPoint}>•</Text>
                     <Text style={styles.insightText}>
                       <Text style={{ fontWeight: '700' }}>{top3[1].name}</Text> is 2nd
-                      {top3[1].carbon_level ? <Text style={{ color: getCarbonColor(top3[1].carbon_level) }}> at {top3[1].carbon_level}</Text> : null}.
-                      Consider ventilation improvements.
+                      {top3[1].carbon_level ? <Text> at {top3[1].carbon_level}</Text> : null}.
+                      {' '}Consider ventilation improvements.
                     </Text>
                   </View>
                 )}
@@ -560,10 +546,8 @@ export default function Reports() {
                   <View style={styles.bulletRow}>
                     <Text style={styles.bulletPoint}>•</Text>
                     <Text style={styles.insightText}>
-                      <Text style={{ fontWeight: '700', color: '#D64545' }}>
-                        {veryHighCount} sensor{veryHighCount > 1 ? 's' : ''}
-                      </Text>{' '}
-                      at VERY HIGH level in {periodLabel} — immediate action required.
+                      <Text style={{ fontWeight: '700' }}>{veryHighCount} sensor{veryHighCount > 1 ? 's' : ''}</Text>
+                      {' '}at VERY HIGH level in {periodLabel} — immediate action required.
                     </Text>
                   </View>
                 )}
@@ -571,8 +555,8 @@ export default function Reports() {
                   <Text style={styles.bulletPoint}>•</Text>
                   <Text style={styles.insightText}>
                     Avg temperature <Text style={{ fontWeight: '700' }}>{avgTemp}°C</Text>,
-                    avg humidity <Text style={{ fontWeight: '700' }}>{avgHumid}%</Text>{' '}
-                    across {filtered.length} active sensors.
+                    avg humidity <Text style={{ fontWeight: '700' }}>{avgHumid}%</Text>
+                    {' '}across {filtered.length} active sensors.
                   </Text>
                 </View>
               </View>
@@ -580,44 +564,84 @@ export default function Reports() {
           </>
         )}
       </ScrollView>
+
+      {/* ✅ CalendarPicker OUTSIDE ScrollView — renders as a proper full-screen Modal */}
+      <CalendarPicker
+        visible={calendarVisible}
+        onClose={() => setCalendarVisible(false)}
+        mode={reportType}
+        selected={selected}
+        onSelect={setSelected}
+        earliestDate={earliestDate || new Date().toISOString()}
+      />
+
     </View>
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container:          { flex: 1, backgroundColor: '#F8F9FA' },
   center:             { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText:        { marginTop: 12, fontSize: 16, color: '#2D2D2D', fontWeight: '500' },
 
-  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 16, backgroundColor: '#FFFFFF' },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 50, paddingBottom: 16, backgroundColor: '#FFFFFF',
+  },
   headerTitle:        { fontSize: 24, fontWeight: '700', color: '#2D2D2D' },
   downloadBtn:        { padding: 10, borderRadius: 12, backgroundColor: '#FFF0EE' },
   downloadBtnDisabled:{ opacity: 0.5 },
 
   toggleContainer:    { flexDirection: 'row', marginHorizontal: 20, marginTop: 20, gap: 12 },
-  toggleButton:       { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB' },
+  toggleButton: {
+    flex: 1, paddingVertical: 14, borderRadius: 12,
+    backgroundColor: '#FFFFFF', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#E5E7EB',
+  },
   toggleButtonActive: { backgroundColor: '#FF5C4D', borderColor: '#FF5C4D' },
   toggleText:         { fontSize: 14, fontWeight: '600', color: '#6B7280' },
   toggleTextActive:   { color: '#FFFFFF' },
 
-  dateCard:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 16, padding: 14, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  dateCard: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 16,
+    padding: 14, borderRadius: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
   dateText:           { fontSize: 15, fontWeight: '600', marginLeft: 10, color: '#2D2D2D' },
   sensorCountSmall:   { fontSize: 12, color: '#9CA3AF' },
   rowCenter:          { flexDirection: 'row', alignItems: 'center' },
 
-  noDataCard:         { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 40, alignItems: 'center', marginHorizontal: 20, marginTop: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  noDataCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 40, alignItems: 'center',
+    marginHorizontal: 20, marginTop: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
   noDataTitle:        { fontSize: 17, fontWeight: '700', color: '#2D2D2D', marginTop: 16, marginBottom: 8, textAlign: 'center' },
   noDataSub:          { fontSize: 13, color: '#9CA3AF', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
   noDataBtn:          { backgroundColor: '#FF5C4D', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
   noDataBtnText:      { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  card:               { backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 16, padding: 20, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  card: {
+    backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 16,
+    padding: 20, borderRadius: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
   cardTitle:          { fontSize: 17, fontWeight: '700', color: '#2D2D2D', marginBottom: 4 },
   cardSubtitle:       { fontSize: 12, color: '#9CA3AF', marginBottom: 16 },
   emptyText:          { color: '#9CA3AF', textAlign: 'center', paddingVertical: 12 },
 
   summaryTopRow:      { flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 16 },
-  iconCircle:         { width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: '#10B981', justifyContent: 'center', alignItems: 'center', marginRight: 20, backgroundColor: '#F0FFF4' },
+  iconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    borderWidth: 3, borderColor: '#10B981',
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 20, backgroundColor: '#F0FFF4',
+  },
   co2Badge:           { position: 'absolute', bottom: 14 },
   co2Text:            { fontSize: 8, fontWeight: '700', color: '#10B981' },
   statsContainer:     { flex: 1 },
@@ -627,7 +651,10 @@ const styles = StyleSheet.create({
   trendText:          { fontSize: 13, fontWeight: '600', marginLeft: 4 },
   divider:            { height: 1, backgroundColor: '#F3F4F6', marginVertical: 14 },
 
-  locationRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  locationRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
+  },
   locName:            { fontSize: 14, color: '#2D2D2D', fontWeight: '600' },
   locLevel:           { fontSize: 10, fontWeight: '700', marginTop: 2 },
   locValue:           { fontSize: 13, fontWeight: '700', color: '#2D2D2D' },
@@ -636,10 +663,12 @@ const styles = StyleSheet.create({
   breakdownLeft:      { flexDirection: 'row', alignItems: 'center', width: 110 },
   levelDot:           { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   breakdownLabel:     { fontSize: 12, color: '#6B7280', fontWeight: '600' },
-  barTrack:           { flex: 1, height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, marginHorizontal: 10, overflow: 'hidden' },
+  barTrack: {
+    flex: 1, height: 8, backgroundColor: '#F3F4F6',
+    borderRadius: 4, marginHorizontal: 10, overflow: 'hidden',
+  },
   barFill:            { height: '100%', borderRadius: 4 },
   breakdownCount:     { fontSize: 13, fontWeight: '700', color: '#1F2937', width: 24, textAlign: 'right' },
-
   chartContainer:     { alignItems: 'center', overflow: 'hidden', marginTop: 8 },
 
   insightList:        { marginTop: 8 },
