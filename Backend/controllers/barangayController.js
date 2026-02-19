@@ -11,16 +11,24 @@ const getAllBarangays = async (req, res) => {
         b.longitude,
         b.city,
 
-        -- LIVE computed averages
-        COALESCE(ROUND(AVG(sd.temperature_c), 2), 0) AS avg_temperature_c,
-        COALESCE(ROUND(AVG(sd.co2_density), 2), 0) AS avg_co2_density
+        -- Averages computed from pre-aggregated sensor data (no duplicates)
+        COALESCE(ROUND(AVG(sensor_avg.avg_temp), 2), 0)  AS avg_temperature_c,
+        COALESCE(ROUND(AVG(sensor_avg.avg_co2), 2), 0)   AS avg_co2_density
 
       FROM barangay b
       LEFT JOIN establishment e ON e.barangay_id = b.barangay_id
-      LEFT JOIN sensor s ON s.establishment_id = e.establishment_id
-      LEFT JOIN sensor_data sd ON sd.sensor_id = s.sensor_id
+      LEFT JOIN (
+        -- Pre-aggregate per sensor FIRST, so joining doesn't multiply rows
+        SELECT
+          s.establishment_id,
+          AVG(sd.temperature_c) AS avg_temp,
+          AVG(sd.co2_density)   AS avg_co2
+        FROM sensor s
+        LEFT JOIN sensor_data sd ON sd.sensor_id = s.sensor_id
+        GROUP BY s.sensor_id            -- ← key: collapse all readings per sensor
+      ) sensor_avg ON sensor_avg.establishment_id = e.establishment_id
 
-      GROUP BY b.barangay_id
+      GROUP BY b.barangay_id, b.barangay_name, b.latitude, b.longitude, b.city
       ORDER BY avg_co2_density DESC
     `);
 
@@ -39,7 +47,6 @@ const getAllBarangays = async (req, res) => {
 };
 
 
-
 // ✅ Get single barangay by ID with LIVE data
 const getBarangayById = async (req, res) => {
   const { id } = req.params;
@@ -53,16 +60,23 @@ const getBarangayById = async (req, res) => {
         b.longitude,
         b.city,
 
-        COALESCE(ROUND(AVG(sd.temperature_c), 2), 0) AS avg_temperature_c,
-        COALESCE(ROUND(AVG(sd.co2_density), 2), 0) AS avg_co2_density
+        COALESCE(ROUND(AVG(sensor_avg.avg_temp), 2), 0)  AS avg_temperature_c,
+        COALESCE(ROUND(AVG(sensor_avg.avg_co2), 2), 0)   AS avg_co2_density
 
       FROM barangay b
       LEFT JOIN establishment e ON e.barangay_id = b.barangay_id
-      LEFT JOIN sensor s ON s.establishment_id = e.establishment_id
-      LEFT JOIN sensor_data sd ON sd.sensor_id = s.sensor_id
+      LEFT JOIN (
+        SELECT
+          s.establishment_id,
+          AVG(sd.temperature_c) AS avg_temp,
+          AVG(sd.co2_density)   AS avg_co2
+        FROM sensor s
+        LEFT JOIN sensor_data sd ON sd.sensor_id = s.sensor_id
+        GROUP BY s.sensor_id
+      ) sensor_avg ON sensor_avg.establishment_id = e.establishment_id
 
       WHERE b.barangay_id = ?
-      GROUP BY b.barangay_id
+      GROUP BY b.barangay_id, b.barangay_name, b.latitude, b.longitude, b.city
     `, [id]);
 
     if (rows.length === 0) {

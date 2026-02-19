@@ -1,48 +1,49 @@
 const pool = require('../config/database');
 
-const convertToTons = (co2_density) => co2_density * 0.001; // adjust factor if needed
+// Adjust conversion factor if needed
+const convertToTons = (value) => value ? value * 0.001 : 0;
 
-// -------------------- MONTHLY REPORT --------------------
+// =====================================================
+// MONTHLY REPORT (with calendar support)
+// GET /api/reports/monthly?date=2026-03-01
+// =====================================================
 exports.getMonthlyReport = async (req, res) => {
     try {
-        const today = new Date();
-        const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-        const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        const selectedDate = req.query.date 
+            ? new Date(req.query.date) 
+            : new Date();
 
-        // 1️⃣ Fetch all sensor_data for current month
-        const [sensorDataRows] = await pool.query(`
-            SELECT sd.*, s.establishment_id
-            FROM sensor_data sd
-            JOIN sensor s ON sd.sensor_id = s.sensor_id
-            WHERE sd.recorded_at >= ? AND sd.recorded_at < ?
-            ORDER BY sd.recorded_at ASC
+        const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        const endDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1);
+
+        // 1️⃣ Total emission this month
+        const [totalRows] = await pool.query(`
+            SELECT SUM(co2_density) AS total
+            FROM sensor_data
+            WHERE recorded_at >= ? AND recorded_at < ?
         `, [startDate, endDate]);
 
-        // Convert CO2 densities to tons in each row for frontend
-        const sensorData = sensorDataRows.map(row => ({
-            ...row,
-            co2_emission: convertToTons(row.co2_density)
-        }));
+        const totalEmission = convertToTons(totalRows[0].total);
 
-        // 2️⃣ Calculate totalEmission
-        const totalEmission = sensorData.reduce((sum, row) => sum + row.co2_emission, 0);
-
-        // 3️⃣ Previous Month Total
-        const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        // 2️⃣ Previous month
+        const prevStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
         const prevEnd = startDate;
-        const [previousRows] = await pool.query(`
-            SELECT co2_density
+
+        const [prevRows] = await pool.query(`
+            SELECT SUM(co2_density) AS total
             FROM sensor_data
             WHERE recorded_at >= ? AND recorded_at < ?
         `, [prevStart, prevEnd]);
-        const previousTotal = previousRows.reduce((sum, row) => sum + convertToTons(row.co2_density), 0);
 
-        // 4️⃣ Percent change (trend)
-        const percentChange = previousTotal > 0 ? ((totalEmission - previousTotal) / previousTotal * 100).toFixed(2) : null;
+        const previousTotal = convertToTons(prevRows[0].total);
 
-        // 5️⃣ Barangay breakdown
+        const percentChange = previousTotal > 0
+            ? (((totalEmission - previousTotal) / previousTotal) * 100).toFixed(2)
+            : 0;
+
+        // 3️⃣ Barangay breakdown
         const [breakdownRows] = await pool.query(`
-            SELECT b.barangay_name AS barangay_name, SUM(sd.co2_density) AS total
+            SELECT b.barangay_name, SUM(sd.co2_density) AS total
             FROM sensor_data sd
             JOIN sensor s ON sd.sensor_id = s.sensor_id
             JOIN establishment e ON s.establishment_id = e.establishment_id
@@ -51,22 +52,25 @@ exports.getMonthlyReport = async (req, res) => {
             GROUP BY b.barangay_name
         `, [startDate, endDate]);
 
-        const breakdown = breakdownRows.map(item => ({
-            barangay_name: item.barangay_name,
-            total: convertToTons(item.total),
-            percentage: totalEmission > 0 ? ((convertToTons(item.total) / totalEmission) * 100).toFixed(2) : 0
-        }));
+        const breakdown = breakdownRows.map(item => {
+            const tons = convertToTons(item.total);
+            return {
+                barangay_name: item.barangay_name,
+                total: tons,
+                percentage: totalEmission > 0
+                    ? ((tons / totalEmission) * 100).toFixed(2)
+                    : 0
+            };
+        });
 
-        // 6️⃣ Period label
-        const period = startDate.toLocaleString('default', { month: 'short', year: 'numeric' }); // e.g., "Feb 2026"
+        const period = startDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
         res.json({
             totalEmission,
             previousTotalEmission: previousTotal,
             percentChange,
             period,
-            breakdown,
-            sensorData
+            breakdown
         });
 
     } catch (err) {
@@ -75,53 +79,53 @@ exports.getMonthlyReport = async (req, res) => {
     }
 };
 
-// -------------------- WEEKLY REPORT --------------------
+
+// =====================================================
+// WEEKLY REPORT (with calendar support)
+// GET /api/reports/weekly?date=2026-02-07
+// =====================================================
 exports.getWeeklyReport = async (req, res) => {
     try {
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - today.getDay());
+        const selectedDate = req.query.date 
+            ? new Date(req.query.date) 
+            : new Date();
+
+        const startDate = new Date(selectedDate);
+        startDate.setDate(selectedDate.getDate() - selectedDate.getDay());
         startDate.setHours(0, 0, 0, 0);
 
         const endDate = new Date(startDate);
         endDate.setDate(startDate.getDate() + 7);
 
-        // 1️⃣ Fetch all sensor_data for current week
-        const [sensorDataRows] = await pool.query(`
-            SELECT sd.*, s.establishment_id
-            FROM sensor_data sd
-            JOIN sensor s ON sd.sensor_id = s.sensor_id
-            WHERE sd.recorded_at >= ? AND sd.recorded_at < ?
-            ORDER BY sd.recorded_at ASC
+        // 1️⃣ Total emission this week
+        const [totalRows] = await pool.query(`
+            SELECT SUM(co2_density) AS total
+            FROM sensor_data
+            WHERE recorded_at >= ? AND recorded_at < ?
         `, [startDate, endDate]);
 
-        const sensorData = sensorDataRows.map(row => ({
-            ...row,
-            co2_emission: convertToTons(row.co2_density)
-        }));
+        const totalEmission = convertToTons(totalRows[0].total);
 
-        // 2️⃣ Calculate totalEmission
-        const totalEmission = sensorData.reduce((sum, row) => sum + row.co2_emission, 0);
-
-        // 3️⃣ Previous week total
+        // 2️⃣ Previous week
         const prevStart = new Date(startDate);
         prevStart.setDate(startDate.getDate() - 7);
         const prevEnd = startDate;
 
-        const [previousRows] = await pool.query(`
-            SELECT co2_density
+        const [prevRows] = await pool.query(`
+            SELECT SUM(co2_density) AS total
             FROM sensor_data
             WHERE recorded_at >= ? AND recorded_at < ?
         `, [prevStart, prevEnd]);
 
-        const previousTotal = previousRows.reduce((sum, row) => sum + convertToTons(row.co2_density), 0);
+        const previousTotal = convertToTons(prevRows[0].total);
 
-        // 4️⃣ Percent change
-        const percentChange = previousTotal > 0 ? ((totalEmission - previousTotal) / previousTotal * 100).toFixed(2) : null;
+        const percentChange = previousTotal > 0
+            ? (((totalEmission - previousTotal) / previousTotal) * 100).toFixed(2)
+            : 0;
 
-        // 5️⃣ Barangay breakdown
+        // 3️⃣ Barangay breakdown
         const [breakdownRows] = await pool.query(`
-            SELECT b.barangay_name AS barangay_name, SUM(sd.co2_density) AS total
+            SELECT b.barangay_name, SUM(sd.co2_density) AS total
             FROM sensor_data sd
             JOIN sensor s ON sd.sensor_id = s.sensor_id
             JOIN establishment e ON s.establishment_id = e.establishment_id
@@ -130,23 +134,25 @@ exports.getWeeklyReport = async (req, res) => {
             GROUP BY b.barangay_name
         `, [startDate, endDate]);
 
-        const breakdown = breakdownRows.map(item => ({
-            barangay_name: item.barangay_name,
-            total: convertToTons(item.total),
-            percentage: totalEmission > 0 ? ((convertToTons(item.total) / totalEmission) * 100).toFixed(2) : 0
-        }));
+        const breakdown = breakdownRows.map(item => {
+            const tons = convertToTons(item.total);
+            return {
+                barangay_name: item.barangay_name,
+                total: tons,
+                percentage: totalEmission > 0
+                    ? ((tons / totalEmission) * 100).toFixed(2)
+                    : 0
+            };
+        });
 
-        // 6️⃣ Period label
-        const weekNumber = Math.ceil((startDate.getDate() - startDate.getDay() + 1) / 7);
-        const period = `Week ${weekNumber}, ${startDate.getFullYear()}`;
+        const period = `${startDate.toDateString()} - ${new Date(endDate - 1).toDateString()}`;
 
         res.json({
             totalEmission,
             previousTotalEmission: previousTotal,
             percentChange,
             period,
-            breakdown,
-            sensorData
+            breakdown
         });
 
     } catch (err) {

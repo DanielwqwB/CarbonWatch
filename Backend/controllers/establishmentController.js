@@ -1,6 +1,5 @@
 const pool = require('../config/database');
 
-
 // ============================================
 // Get all establishments (with clean sensor metrics)
 // ============================================
