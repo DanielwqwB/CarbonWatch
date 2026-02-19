@@ -551,10 +551,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
-  filterIndicator: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF5C4D' },
+  filterIndicator: { position: 'absolute', top: 8, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF5C4D' },
 
   // ─── Live Pulse ───────────────────────────────────────────────────────────
-  liveContainer:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF2F1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  liveContainer:  { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#FEF2F1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   pulseWrapper:   { width: 12, height: 12, justifyContent: 'center', alignItems: 'center' },
   pulseDot:       { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF5C4D', position: 'absolute' },
   pulseRing:      { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FF5C4D', opacity: 0.3 },

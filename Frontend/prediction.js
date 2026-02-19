@@ -6,7 +6,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
-const API_URL = 'https://co2-prediction-2.onrender.com/api/predictions/latest';
+const API_URL = 'https://ai-prediction-jwnp.onrender.com/api/predictions/latest';
 
 export default function PredictionScreen() {
   const [selectedTab, setSelectedTab] = useState('weekly');

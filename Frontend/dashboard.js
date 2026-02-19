@@ -9,9 +9,12 @@ import {
   Gauge, AlertTriangle, Calendar,
 } from 'lucide-react-native';
 import CalendarPicker from './Calendarpicker';
+import SettingsScreen, { DEFAULT_SETTINGS } from './SettingsScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SENSOR_API      = 'https://bytetech-final1.onrender.com/sensor';
 const SENSOR_DATA_API = 'https://bytetech-final1.onrender.com/sensor-data';
+const STORAGE_KEY     = '@envi_settings';
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -32,25 +35,51 @@ const getCarbonColor = (level) => {
 const getRankColor = (rank) =>
   (['#FF5C4D','#FF7A6E','#FF9890','#FFB6B1','#FFC5C0'])[rank - 1] || '#F8F9FA';
 
-// co2_density from the API is NOT in ppm — it's a raw sensor value (likely mg/m³ or a ratio).
-// The backend computes carbon_level separately, so we display co2_density as a raw index
-// and rely on carbon_level for the actual air quality classification.
 const formatCO2 = (val) => {
   const n = parseFloat(val);
   if (isNaN(n)) return '—';
   return n.toFixed(4);
 };
 
+// Convert Celsius to Fahrenheit if needed
+const formatTemp = (celsius, unit) => {
+  if (celsius == null || isNaN(parseFloat(celsius))) return '—';
+  const c = parseFloat(celsius);
+  if (unit === 'fahrenheit') return `${((c * 9) / 5 + 32).toFixed(1)}°F`;
+  return `${c.toFixed(1)}°C`;
+};
+
 export default function Dashboard() {
   const [loading, setLoading]                 = useState(true);
-  const [sensorList, setSensorList]           = useState([]);  // from /sensor
-  const [dataList, setDataList]               = useState([]);  // from /sensor-data (ALL records)
+  const [sensorList, setSensorList]           = useState([]);
+  const [dataList, setDataList]               = useState([]);
   const [error, setError]                     = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [earliestDate, setEarliestDate]       = useState(null);
-  const [selected, setSelected]               = useState(null); // { year, month }
+  const [selected, setSelected]               = useState(null);
+  const [appSettings, setAppSettings]         = useState(DEFAULT_SETTINGS);
 
-  // ── Fetch ────────────────────────────────────────────────────────────────────
+  // Load settings from storage
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) setAppSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
+      } catch (_) {}
+    })();
+  }, []);
+
+  // Re-read settings every time the settings modal closes (user may have changed them)
+  const handleSettingsClose = async () => {
+    setSettingsVisible(false);
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (raw) setAppSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
+    } catch (_) {}
+  };
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -68,12 +97,9 @@ export default function Dashboard() {
       setSensorList(Array.isArray(sensors) ? sensors : []);
       setDataList(records);
 
-      // Find date range from sensor-data
       const dates = records
-        .map(d => d.recorded_at)
-        .filter(Boolean)
-        .map(d => new Date(d))
-        .sort((a, b) => a - b);
+        .map(d => d.recorded_at).filter(Boolean)
+        .map(d => new Date(d)).sort((a, b) => a - b);
 
       if (dates.length) {
         setEarliestDate(dates[0].toISOString());
@@ -90,15 +116,13 @@ export default function Dashboard() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ── Merge: for the selected month, pick the LATEST record per sensor ─────────
+  // ── Merge: latest record per sensor for selected month ────────────────────
   const merged = useMemo(() => {
     if (!sensorList.length) return [];
 
-    // Build a map of sensor metadata keyed by sensor_id
     const sensorMap = {};
     sensorList.forEach(s => { sensorMap[s.sensor_id] = s; });
 
-    // Filter data records to selected month
     const filtered = selected
       ? dataList.filter(d => {
           if (!d.recorded_at) return false;
@@ -107,7 +131,6 @@ export default function Dashboard() {
         })
       : dataList;
 
-    // Among filtered records, keep only the LATEST per sensor_id
     const latestMap = {};
     filtered.forEach(d => {
       const existing = latestMap[d.sensor_id];
@@ -116,7 +139,6 @@ export default function Dashboard() {
       }
     });
 
-    // Join with sensor metadata
     return Object.values(latestMap).map(d => ({
       ...(sensorMap[d.sensor_id] || {}),
       ...d,
@@ -125,26 +147,35 @@ export default function Dashboard() {
 
   const hasData = merged.length > 0;
 
-  // ── Derived metrics ───────────────────────────────────────────────────────────
+  // ── Derived metrics (respects settings) ───────────────────────────────────
   const avgOf = (key) => {
     const valid = merged.filter(s => s[key] != null && !isNaN(parseFloat(s[key])));
-    if (!valid.length) return '—';
-    return (valid.reduce((sum, x) => sum + parseFloat(x[key]), 0) / valid.length).toFixed(1);
+    if (!valid.length) return null;
+    return valid.reduce((sum, x) => sum + parseFloat(x[key]), 0) / valid.length;
   };
 
-  const avgTemp  = avgOf('temperature_c');
-  const avgHumid = avgOf('humidity');
-  const avgHeat  = avgOf('heat_index_c');
+  const avgTempRaw  = avgOf('temperature_c');
+  const avgHumidRaw = avgOf('humidity');
+  const avgHeatRaw  = avgOf('heat_index_c');
 
-  // Average CO2 density (raw sensor value, not ppm)
+  const avgTempDisplay  = avgTempRaw  != null ? formatTemp(avgTempRaw,  appSettings.tempUnit) : '—';
+  const avgHumidDisplay = avgHumidRaw != null ? `${avgHumidRaw.toFixed(1)}%` : '—';
+  const avgHeatDisplay  = avgHeatRaw  != null ? formatTemp(avgHeatRaw,  appSettings.tempUnit) : '—';
+
   const avgCO2Raw = (() => {
     const valid = merged.filter(s => s.co2_density != null && !isNaN(parseFloat(s.co2_density)));
     if (!valid.length) return '—';
     return (valid.reduce((sum, x) => sum + parseFloat(x.co2_density), 0) / valid.length).toFixed(4);
   })();
 
-  const heatStressCount = merged.filter(s => parseFloat(s.heat_index_c) >= 41).length;
-  const veryHighCount   = merged.filter(s => (s.carbon_level || '').toUpperCase() === 'VERY HIGH').length;
+  // Use the configurable heat stress threshold from settings
+  const heatStressCount = merged.filter(
+    s => parseFloat(s.heat_index_c) >= appSettings.heatStressThreshold
+  ).length;
+
+  const veryHighCount = merged.filter(
+    s => (s.carbon_level || '').toUpperCase() === 'VERY HIGH'
+  ).length;
 
   const carbonCounts = { 'VERY HIGH': 0, HIGH: 0, MODERATE: 0, LOW: 0, NORMAL: 0 };
   merged.forEach(s => {
@@ -152,7 +183,6 @@ export default function Dashboard() {
     if (carbonCounts[l] !== undefined) carbonCounts[l]++;
   });
 
-  // Top 5 by carbon_level severity, then by co2_density as tiebreaker
   const severityRank = { 'VERY HIGH': 4, HIGH: 3, MODERATE: 2, LOW: 1, NORMAL: 0 };
   const topBarangays = [...merged]
     .filter(s => s.co2_density != null || s.carbon_level != null)
@@ -168,7 +198,6 @@ export default function Dashboard() {
     ? Math.max(...topBarangays.map(s => parseFloat(s.co2_density) || 0))
     : 1;
 
-  // Trend: compare top two by co2_density value
   const trendUp = topBarangays.length >= 2
     ? parseFloat(topBarangays[0].co2_density) > parseFloat(topBarangays[1].co2_density)
     : false;
@@ -183,7 +212,7 @@ export default function Dashboard() {
     ? `${MONTHS[selected.month]} ${selected.year}`
     : 'Loading…';
 
-  // ── Loading / error ───────────────────────────────────────────────────────────
+  // ── Loading / error ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -212,6 +241,10 @@ export default function Dashboard() {
     <SafeAreaView style={styles.container}>
       <View style={styles.statusBarPlaceholder} />
 
+      {/* Settings Modal */}
+      <SettingsScreen visible={settingsVisible} onClose={handleSettingsClose} />
+
+      {/* Calendar Picker Modal */}
       <CalendarPicker
         visible={calendarVisible}
         onClose={() => setCalendarVisible(false)}
@@ -226,7 +259,10 @@ export default function Dashboard() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>ENVI Analytics</Text>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setSettingsVisible(true)}
+          >
             <Settings color="#2D2D2D" size={24} />
           </TouchableOpacity>
         </View>
@@ -278,14 +314,13 @@ export default function Dashboard() {
                   <View style={[styles.iconCircle, { backgroundColor: '#FFF0EE' }]}>
                     <Thermometer color="#FF5C4D" size={22} />
                   </View>
-                  <Text style={styles.metricValue}>{avgTemp}°C</Text>
+                  <Text style={styles.metricValue}>{avgTempDisplay}</Text>
                   <Text style={styles.metricLabel}>Avg Temperature</Text>
                 </View>
                 <View style={styles.card}>
                   <View style={[styles.iconCircle, { backgroundColor: '#EFF6FF' }]}>
                     <Wind color="#3B82F6" size={22} />
                   </View>
-                  {/* co2_density is a raw sensor index, NOT ppm */}
                   <Text style={styles.metricValue}>{avgCO2Raw}</Text>
                   <Text style={styles.metricLabel}>Avg CO₂ Index</Text>
                 </View>
@@ -295,7 +330,7 @@ export default function Dashboard() {
                   <View style={[styles.iconCircle, { backgroundColor: '#ECFEFF' }]}>
                     <Droplets color="#06B6D4" size={22} />
                   </View>
-                  <Text style={styles.metricValue}>{avgHumid}%</Text>
+                  <Text style={styles.metricValue}>{avgHumidDisplay}</Text>
                   <Text style={styles.metricLabel}>Avg Humidity</Text>
                 </View>
                 <View style={styles.card}>
@@ -303,7 +338,14 @@ export default function Dashboard() {
                     <AlertTriangle color="#F97316" size={22} />
                   </View>
                   <Text style={styles.metricValue}>{heatStressCount}</Text>
-                  <Text style={styles.metricLabel}>Heat Stress Sensors</Text>
+                  <Text style={styles.metricLabel}>
+                    Heat Stress{'\n'}
+                    <Text style={{ fontSize: 10, color: '#9CA3AF' }}>
+                      ≥{appSettings.tempUnit === 'fahrenheit'
+                          ? `${((appSettings.heatStressThreshold * 9) / 5 + 32).toFixed(0)}°F`
+                          : `${appSettings.heatStressThreshold}°C`}
+                    </Text>
+                  </Text>
                 </View>
               </View>
             </View>
@@ -328,7 +370,7 @@ export default function Dashboard() {
                 <Gauge color="#F97316" size={18} />
                 <Text style={styles.heatText}>
                   Avg Heat Index:{' '}
-                  <Text style={{ fontWeight: '700', color: '#F97316' }}>{avgHeat}°C</Text>
+                  <Text style={{ fontWeight: '700', color: '#F97316' }}>{avgHeatDisplay}</Text>
                 </Text>
                 {veryHighCount > 0 && (
                   <View style={styles.alertPill}>
@@ -371,7 +413,6 @@ export default function Dashboard() {
                             </View>
                           )}
                         </View>
-                        {/* Show raw CO2 index value, not labeled as ppm */}
                         <Text style={styles.barangayValue}>
                           {co2 > 0 ? formatCO2(item.co2_density) : '—'}
                         </Text>
@@ -380,11 +421,15 @@ export default function Dashboard() {
                         <View style={[styles.progressBarFill, { backgroundColor: color, width: pct }]} />
                       </View>
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailText}>🌡 {item.temperature_c ?? '—'}°C</Text>
+                        <Text style={styles.detailText}>
+                          🌡 {formatTemp(item.temperature_c, appSettings.tempUnit)}
+                        </Text>
                         <Text style={styles.detailText}>
                           💧 {item.humidity != null ? `${parseFloat(item.humidity).toFixed(0)}%` : '—'}
                         </Text>
-                        <Text style={styles.detailText}>🔥 HI {item.heat_index_c ?? '—'}°C</Text>
+                        <Text style={styles.detailText}>
+                          🔥 HI {formatTemp(item.heat_index_c, appSettings.tempUnit)}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -399,7 +444,6 @@ export default function Dashboard() {
                 <Text style={styles.footerLabel}>Air Quality Summary — {periodLabel}</Text>
               </View>
 
-              {/* Show carbon level breakdown instead of misleading total CO2 */}
               <View style={styles.summaryGrid}>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryCount, { color: '#D64545' }]}>{carbonCounts['VERY HIGH']}</Text>
@@ -471,7 +515,7 @@ const styles = StyleSheet.create({
   row:                   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   card:                  { width: '48%', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   iconCircle:            { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  metricValue:           { fontSize: 26, fontWeight: '700', color: '#2D2D2D', marginBottom: 4 },
+  metricValue:           { fontSize: 22, fontWeight: '700', color: '#2D2D2D', marginBottom: 4 },
   metricLabel:           { fontSize: 12, color: '#6B7280', textAlign: 'center', lineHeight: 18 },
 
   sectionContainer:      { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
@@ -502,12 +546,10 @@ const styles = StyleSheet.create({
   footerContainer:       { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   footerHeader:          { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   footerLabel:           { fontSize: 14, fontWeight: '500', color: '#6B7280', marginLeft: 8 },
-
   summaryGrid:           { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   summaryItem:           { alignItems: 'center', flex: 1 },
   summaryCount:          { fontSize: 28, fontWeight: '700' },
   summaryLabel:          { fontSize: 10, color: '#6B7280', fontWeight: '500', marginTop: 2, textAlign: 'center' },
-
   comparisonRow:         { flexDirection: 'row', alignItems: 'center' },
   comparisonBadge:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginRight: 8 },
   comparisonText:        { fontSize: 14, fontWeight: '700' },
