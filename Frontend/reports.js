@@ -27,20 +27,25 @@ const getCarbonColor = (level) => {
   }
 };
 
+// co2_density is a raw sensor index (NOT ppm). Display it as a decimal index value.
+const formatCO2Index = (val) => {
+  const n = parseFloat(val);
+  return isNaN(n) ? '—' : n.toFixed(4);
+};
+
+const SEVERITY_RANK = { 'VERY HIGH': 4, HIGH: 3, MODERATE: 2, LOW: 1, NORMAL: 0 };
+
 export default function Reports() {
-  const [loading, setLoading]         = useState(true);
-  const [refreshing, setRefreshing]   = useState(false);
-  const [allMerged, setAllMerged]     = useState([]);
-  const [earliestDate, setEarliestDate] = useState(null);
-  const [reportType, setReportType]   = useState('monthly');
+  const [loading, setLoading]               = useState(true);
+  const [refreshing, setRefreshing]         = useState(false);
+  const [sensorList, setSensorList]         = useState([]);
+  const [dataList, setDataList]             = useState([]);
+  const [earliestDate, setEarliestDate]     = useState(null);
+  const [reportType, setReportType]         = useState('monthly');
   const [calendarVisible, setCalendarVisible] = useState(false);
+  const [selected, setSelected]             = useState(null);
 
-  // Selected period
-  // monthly: { year, month }
-  // weekly:  { year, month, weekNum, startDate, endDate }
-  const [selected, setSelected] = useState(null);
-
-  // ── Fetch & join ────────────────────────────────────────────────────────────
+  // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchAllData = async (isInitialLoad = false) => {
     try {
       if (isInitialLoad) setLoading(true);
@@ -50,29 +55,21 @@ export default function Reports() {
         fetch(SENSOR_DATA_API),
       ]);
 
-      const sensorList = await sensorRes.json();
-      const dataJson   = await dataRes.json();
-      const dataList   = Array.isArray(dataJson) ? dataJson : (dataJson.data || []);
+      const sensors  = await sensorRes.json();
+      const dataJson = await dataRes.json();
+      const records  = Array.isArray(dataJson) ? dataJson : (dataJson.data || []);
 
-      const dataMap = {};
-      dataList.forEach(d => { dataMap[d.sensor_id] = d; });
+      setSensorList(Array.isArray(sensors) ? sensors : []);
+      setDataList(records);
 
-      const merged = (Array.isArray(sensorList) ? sensorList : []).map(s => ({
-        ...s,
-        ...(dataMap[s.sensor_id] || {}),
-      }));
-
-      setAllMerged(merged);
-
-      // Seed calendar range from earliest recorded_at
-      const dates = dataList
+      // Seed calendar range
+      const dates = records
         .map(d => d.recorded_at).filter(Boolean)
         .map(d => new Date(d)).sort((a, b) => a - b);
 
       if (dates.length) {
         setEarliestDate(dates[0].toISOString());
         const latest = dates[dates.length - 1];
-        // Default selection: latest month
         setSelected({ year: latest.getFullYear(), month: latest.getMonth() });
       }
     } catch (err) {
@@ -87,48 +84,68 @@ export default function Reports() {
 
   const onRefresh = () => { setRefreshing(true); fetchAllData(false); };
 
-  // ── When report type changes, reset selection to latest month ───────────────
   const handleReportTypeChange = (type) => {
     setReportType(type);
-    // Keep month selection, just clear week info
-    if (selected) {
-      setSelected({ year: selected.year, month: selected.month });
-    }
+    if (selected) setSelected({ year: selected.year, month: selected.month });
   };
 
-  // ── Filter merged data by selected period ───────────────────────────────────
+  // ── Merge: filter records to selected period, then keep latest per sensor ──
   const filtered = useMemo(() => {
-    if (!selected || !allMerged.length) return allMerged;
+    if (!sensorList.length) return [];
 
-    return allMerged.filter(s => {
-      if (!s.recorded_at) return false;
-      const d = new Date(s.recorded_at);
+    const sensorMap = {};
+    sensorList.forEach(s => { sensorMap[s.sensor_id] = s; });
 
-      if (reportType === 'monthly') {
-        return d.getFullYear() === selected.year && d.getMonth() === selected.month;
-      } else {
-        // weekly: within startDate..endDate
-        if (!selected.startDate || !selected.endDate) {
-          // If no week chosen yet, show full month
-          return d.getFullYear() === selected.year && d.getMonth() === selected.month;
-        }
-        const start = new Date(selected.startDate); start.setHours(0, 0, 0, 0);
-        const end   = new Date(selected.endDate);   end.setHours(23, 59, 59, 999);
-        return d >= start && d <= end;
+    // Filter records to selected period
+    const periodRecords = selected
+      ? dataList.filter(d => {
+          if (!d.recorded_at) return false;
+          const dt = new Date(d.recorded_at);
+
+          if (reportType === 'monthly') {
+            return dt.getFullYear() === selected.year && dt.getMonth() === selected.month;
+          } else {
+            if (!selected.startDate || !selected.endDate) {
+              return dt.getFullYear() === selected.year && dt.getMonth() === selected.month;
+            }
+            const start = new Date(selected.startDate); start.setHours(0, 0, 0, 0);
+            const end   = new Date(selected.endDate);   end.setHours(23, 59, 59, 999);
+            return dt >= start && dt <= end;
+          }
+        })
+      : dataList;
+
+    // Keep only the LATEST record per sensor
+    const latestMap = {};
+    periodRecords.forEach(d => {
+      const existing = latestMap[d.sensor_id];
+      if (!existing || new Date(d.recorded_at) > new Date(existing.recorded_at)) {
+        latestMap[d.sensor_id] = d;
       }
     });
-  }, [allMerged, selected, reportType]);
+
+    // Join with sensor metadata
+    return Object.values(latestMap).map(d => ({
+      ...(sensorMap[d.sensor_id] || {}),
+      ...d,
+    }));
+  }, [sensorList, dataList, selected, reportType]);
 
   const hasData = filtered.length > 0;
 
-  // ── Derived stats ───────────────────────────────────────────────────────────
-  const totalCO2 = filtered.reduce((sum, s) => sum + (parseFloat(s.co2_density) || 0), 0);
-
+  // ── Derived stats ──────────────────────────────────────────────────────────
   const avgOf = (key) => {
-    const valid = filtered.filter(s => s[key] != null);
+    const valid = filtered.filter(s => s[key] != null && !isNaN(parseFloat(s[key])));
     if (!valid.length) return 0;
     return valid.reduce((s, x) => s + parseFloat(x[key]), 0) / valid.length;
   };
+
+  // Average CO2 index (raw, not ppm)
+  const avgCO2Index = (() => {
+    const valid = filtered.filter(s => s.co2_density != null && !isNaN(parseFloat(s.co2_density)));
+    if (!valid.length) return '—';
+    return (valid.reduce((sum, x) => sum + parseFloat(x.co2_density), 0) / valid.length).toFixed(4);
+  })();
 
   const carbonCounts = { 'VERY HIGH': 0, HIGH: 0, MODERATE: 0, LOW: 0, NORMAL: 0 };
   filtered.forEach(s => {
@@ -136,29 +153,31 @@ export default function Reports() {
     if (carbonCounts[l] !== undefined) carbonCounts[l]++;
   });
 
+  // Sort by severity first, then co2_density as tiebreaker
   const topBarangays = [...filtered]
-    .filter(s => s.co2_density != null)
-    .sort((a, b) => b.co2_density - a.co2_density)
+    .filter(s => s.carbon_level != null || s.co2_density != null)
+    .sort((a, b) => {
+      const aRank = SEVERITY_RANK[(a.carbon_level || 'NORMAL').toUpperCase()] ?? 0;
+      const bRank = SEVERITY_RANK[(b.carbon_level || 'NORMAL').toUpperCase()] ?? 0;
+      if (bRank !== aRank) return bRank - aRank;
+      return (parseFloat(b.co2_density) || 0) - (parseFloat(a.co2_density) || 0);
+    })
     .slice(0, 3);
 
-  const totalFiltered = topBarangays.reduce((s, b) => s + parseFloat(b.co2_density), 0);
-
   const top3 = topBarangays.map(b => ({
-    name:         b.barangay_name || b.sensor_name,
-    co2:          parseFloat(b.co2_density),
+    name:         b.barangay_name || b.sensor_name || `Sensor ${b.sensor_id}`,
+    co2:          parseFloat(b.co2_density) || 0,
+    co2Display:   formatCO2Index(b.co2_density),
     carbon_level: b.carbon_level,
-    percentage:   totalFiltered > 0
-      ? Math.round((b.co2_density / totalFiltered) * 100)
-      : 0,
   }));
 
-  // Trend: highest vs second
+  // Trend: compare top two by co2_density
   const trendUp   = top3.length >= 2 ? top3[0].co2 > top3[1].co2 : false;
-  const trendDiff = top3.length >= 2
+  const trendDiff = top3.length >= 2 && top3[1].co2 !== 0
     ? Math.abs(((top3[0].co2 - top3[1].co2) / top3[1].co2) * 100).toFixed(1)
     : '0';
 
-  // ── Chart data: sensors by carbon level ────────────────────────────────────
+  // ── Chart data ─────────────────────────────────────────────────────────────
   const chartData = {
     labels: ['Normal', 'Low', 'Mod', 'High', 'V.High'],
     datasets: [{
@@ -172,7 +191,7 @@ export default function Reports() {
     }],
   };
 
-  // ── Period label ────────────────────────────────────────────────────────────
+  // ── Period label ───────────────────────────────────────────────────────────
   const periodLabel = !selected
     ? 'Loading…'
     : reportType === 'monthly'
@@ -181,7 +200,6 @@ export default function Reports() {
         ? `${MONTHS[selected.month].slice(0, 3)} — Week ${selected.weekNum}`
         : `${MONTHS[selected.month]} ${selected.year}`;
 
-  // ── Insights ────────────────────────────────────────────────────────────────
   const veryHighCount = carbonCounts['VERY HIGH'];
   const avgTemp       = avgOf('temperature_c').toFixed(1);
   const avgHumid      = avgOf('humidity').toFixed(1);
@@ -205,7 +223,6 @@ export default function Reports() {
         </TouchableOpacity>
       </View>
 
-      {/* Calendar Picker Modal */}
       <CalendarPicker
         visible={calendarVisible}
         onClose={() => setCalendarVisible(false)}
@@ -221,7 +238,7 @@ export default function Reports() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF5C4D']} />
         }
       >
-        {/* ── Toggle ───────────────────────────────────────────────────── */}
+        {/* ── Toggle ── */}
         <View style={styles.toggleContainer}>
           {[
             { key: 'monthly', label: 'Monthly' },
@@ -239,7 +256,7 @@ export default function Reports() {
           ))}
         </View>
 
-        {/* ── Date Selector (tappable) ──────────────────────────────────── */}
+        {/* ── Date Selector ── */}
         <TouchableOpacity style={styles.dateCard} onPress={() => setCalendarVisible(true)}>
           <View style={styles.rowCenter}>
             <MaterialCommunityIcons name="calendar-month" size={20} color="#FF5C4D" />
@@ -253,7 +270,7 @@ export default function Reports() {
           </View>
         </TouchableOpacity>
 
-        {/* ── No data state ─────────────────────────────────────────────── */}
+        {/* ── No data state ── */}
         {!hasData ? (
           <View style={styles.noDataCard}>
             <MaterialCommunityIcons name="calendar-remove-outline" size={48} color="#D1D5DB" />
@@ -277,7 +294,7 @@ export default function Reports() {
           </View>
         ) : (
           <>
-            {/* ── Summary Card ─────────────────────────────────────────── */}
+            {/* ── Summary Card ── */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Carbon Emission Summary</Text>
 
@@ -289,9 +306,10 @@ export default function Reports() {
                   </View>
                 </View>
                 <View style={styles.statsContainer}>
-                  <Text style={styles.bigNumber}>{totalCO2.toFixed(0)} ppm</Text>
+                  {/* Show avg CO2 index, not a "total ppm" which was meaningless */}
+                  <Text style={styles.bigNumber}>{avgCO2Index}</Text>
                   <Text style={styles.unitText}>
-                    {filtered.length} sensors · {periodLabel}
+                    Avg CO₂ Index · {filtered.length} sensors · {periodLabel}
                   </Text>
                   <View style={styles.trendRow}>
                     <MaterialCommunityIcons
@@ -308,7 +326,7 @@ export default function Reports() {
 
               <View style={styles.divider} />
 
-              {/* Top 3 list */}
+              {/* Top 3 list — sorted by severity */}
               {top3.length === 0 ? (
                 <Text style={styles.emptyText}>No barangay data</Text>
               ) : (
@@ -322,13 +340,14 @@ export default function Reports() {
                         </Text>
                       )}
                     </View>
-                    <Text style={styles.locValue}>{loc.co2} ppm · {loc.percentage}%</Text>
+                    {/* Display raw index value, not "X ppm" */}
+                    <Text style={styles.locValue}>Index: {loc.co2Display}</Text>
                   </View>
                 ))
               )}
             </View>
 
-            {/* ── Carbon Level Breakdown ───────────────────────────────── */}
+            {/* ── Carbon Level Breakdown ── */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Carbon Level Breakdown</Text>
               <Text style={styles.cardSubtitle}>Sensor count — {periodLabel}</Text>
@@ -353,9 +372,9 @@ export default function Reports() {
               })}
             </View>
 
-            {/* ── Bar Chart ────────────────────────────────────────────── */}
+            {/* ── Bar Chart ── */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Sensors per Carbon Level</Text>
+              <Text style={styles.cardTitle}>Carbon Level per Sensor</Text>
               <Text style={styles.cardSubtitle}>{periodLabel}</Text>
               <View style={styles.chartContainer}>
                 <BarChart
@@ -379,7 +398,7 @@ export default function Reports() {
               </View>
             </View>
 
-            {/* ── Actionable Insights ───────────────────────────────────── */}
+            {/* ── Actionable Insights ── */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Actionable Insights</Text>
               <View style={styles.insightList}>
@@ -387,9 +406,12 @@ export default function Reports() {
                   <View style={styles.bulletRow}>
                     <Text style={styles.bulletPoint}>•</Text>
                     <Text style={styles.insightText}>
-                      <Text style={{ fontWeight: '700' }}>{top3[0].name}</Text> leads
-                      with <Text style={{ fontWeight: '700' }}>{top3[0].co2} ppm</Text>{' '}
-                      CO₂ — priority inspection recommended.
+                      <Text style={{ fontWeight: '700' }}>{top3[0].name}</Text> has the
+                      highest carbon level
+                      {top3[0].carbon_level
+                        ? <Text style={{ fontWeight: '700', color: getCarbonColor(top3[0].carbon_level) }}> ({top3[0].carbon_level})</Text>
+                        : null
+                      } — priority inspection recommended.
                     </Text>
                   </View>
                 )}
@@ -398,8 +420,10 @@ export default function Reports() {
                     <Text style={styles.bulletPoint}>•</Text>
                     <Text style={styles.insightText}>
                       <Text style={{ fontWeight: '700' }}>{top3[1].name}</Text> is 2nd
-                      at <Text style={{ fontWeight: '700' }}>{top3[1].co2} ppm</Text>.
-                      Consider ventilation improvements.
+                      {top3[1].carbon_level
+                        ? <Text style={{ color: getCarbonColor(top3[1].carbon_level) }}> at {top3[1].carbon_level}</Text>
+                        : null
+                      }. Consider ventilation improvements.
                     </Text>
                   </View>
                 )}

@@ -32,17 +32,25 @@ const getCarbonColor = (level) => {
 const getRankColor = (rank) =>
   (['#FF5C4D','#FF7A6E','#FF9890','#FFB6B1','#FFC5C0'])[rank - 1] || '#F8F9FA';
 
+// co2_density from the API is NOT in ppm — it's a raw sensor value (likely mg/m³ or a ratio).
+// The backend computes carbon_level separately, so we display co2_density as a raw index
+// and rely on carbon_level for the actual air quality classification.
+const formatCO2 = (val) => {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  return n.toFixed(4);
+};
+
 export default function Dashboard() {
-  const [loading, setLoading]           = useState(true);
-  const [allMerged, setAllMerged]       = useState([]);   // full unfiltered list
-  const [error, setError]               = useState(false);
+  const [loading, setLoading]                 = useState(true);
+  const [sensorList, setSensorList]           = useState([]);  // from /sensor
+  const [dataList, setDataList]               = useState([]);  // from /sensor-data (ALL records)
+  const [error, setError]                     = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
-  const [earliestDate, setEarliestDate] = useState(null);
+  const [earliestDate, setEarliestDate]       = useState(null);
+  const [selected, setSelected]               = useState(null); // { year, month }
 
-  // Selected period — default to whatever month the data actually has
-  const [selected, setSelected] = useState(null);  // { year, month }
-
-  // ── Fetch & join ────────────────────────────────────────────────────────────
+  // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -53,32 +61,22 @@ export default function Dashboard() {
         fetch(SENSOR_DATA_API),
       ]);
 
-      const sensorList = await sensorRes.json();
-      const dataJson   = await dataRes.json();
-      const dataList   = Array.isArray(dataJson) ? dataJson : (dataJson.data || []);
+      const sensors  = await sensorRes.json();
+      const dataJson = await dataRes.json();
+      const records  = Array.isArray(dataJson) ? dataJson : (dataJson.data || []);
 
-      const dataMap = {};
-      dataList.forEach(d => { dataMap[d.sensor_id] = d; });
+      setSensorList(Array.isArray(sensors) ? sensors : []);
+      setDataList(records);
 
-      const merged = (Array.isArray(sensorList) ? sensorList : []).map(s => ({
-        ...s,
-        ...(dataMap[s.sensor_id] || {}),
-      }));
-
-      setAllMerged(merged);
-
-      // Find earliest recorded_at to seed the calendar range
-      const dates = dataList
+      // Find date range from sensor-data
+      const dates = records
         .map(d => d.recorded_at)
         .filter(Boolean)
         .map(d => new Date(d))
         .sort((a, b) => a - b);
 
       if (dates.length) {
-        const earliest = dates[0];
-        setEarliestDate(earliest.toISOString());
-
-        // Auto-select the month of the most recent reading
+        setEarliestDate(dates[0].toISOString());
         const latest = dates[dates.length - 1];
         setSelected({ year: latest.getFullYear(), month: latest.getMonth() });
       }
@@ -92,31 +90,58 @@ export default function Dashboard() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ── Filter merged data to selected month ────────────────────────────────────
+  // ── Merge: for the selected month, pick the LATEST record per sensor ─────────
   const merged = useMemo(() => {
-    if (!selected || !allMerged.length) return allMerged;
+    if (!sensorList.length) return [];
 
-    return allMerged.filter(s => {
-      if (!s.recorded_at) return false;
-      const d = new Date(s.recorded_at);
-      return d.getFullYear() === selected.year && d.getMonth() === selected.month;
+    // Build a map of sensor metadata keyed by sensor_id
+    const sensorMap = {};
+    sensorList.forEach(s => { sensorMap[s.sensor_id] = s; });
+
+    // Filter data records to selected month
+    const filtered = selected
+      ? dataList.filter(d => {
+          if (!d.recorded_at) return false;
+          const dt = new Date(d.recorded_at);
+          return dt.getFullYear() === selected.year && dt.getMonth() === selected.month;
+        })
+      : dataList;
+
+    // Among filtered records, keep only the LATEST per sensor_id
+    const latestMap = {};
+    filtered.forEach(d => {
+      const existing = latestMap[d.sensor_id];
+      if (!existing || new Date(d.recorded_at) > new Date(existing.recorded_at)) {
+        latestMap[d.sensor_id] = d;
+      }
     });
-  }, [allMerged, selected]);
+
+    // Join with sensor metadata
+    return Object.values(latestMap).map(d => ({
+      ...(sensorMap[d.sensor_id] || {}),
+      ...d,
+    }));
+  }, [sensorList, dataList, selected]);
 
   const hasData = merged.length > 0;
 
-  // ── Derived metrics (all guard against empty) ───────────────────────────────
-  const totalCO2 = merged.reduce((sum, s) => sum + (parseFloat(s.co2_density) || 0), 0);
-
-  const avgOf = (key, parser = parseFloat) => {
-    const valid = merged.filter(s => s[key] != null);
+  // ── Derived metrics ───────────────────────────────────────────────────────────
+  const avgOf = (key) => {
+    const valid = merged.filter(s => s[key] != null && !isNaN(parseFloat(s[key])));
     if (!valid.length) return '—';
-    return (valid.reduce((s, x) => s + parser(x[key]), 0) / valid.length).toFixed(1);
+    return (valid.reduce((sum, x) => sum + parseFloat(x[key]), 0) / valid.length).toFixed(1);
   };
 
   const avgTemp  = avgOf('temperature_c');
   const avgHumid = avgOf('humidity');
   const avgHeat  = avgOf('heat_index_c');
+
+  // Average CO2 density (raw sensor value, not ppm)
+  const avgCO2Raw = (() => {
+    const valid = merged.filter(s => s.co2_density != null && !isNaN(parseFloat(s.co2_density)));
+    if (!valid.length) return '—';
+    return (valid.reduce((sum, x) => sum + parseFloat(x.co2_density), 0) / valid.length).toFixed(4);
+  })();
 
   const heatStressCount = merged.filter(s => parseFloat(s.heat_index_c) >= 41).length;
   const veryHighCount   = merged.filter(s => (s.carbon_level || '').toUpperCase() === 'VERY HIGH').length;
@@ -127,31 +152,38 @@ export default function Dashboard() {
     if (carbonCounts[l] !== undefined) carbonCounts[l]++;
   });
 
+  // Top 5 by carbon_level severity, then by co2_density as tiebreaker
+  const severityRank = { 'VERY HIGH': 4, HIGH: 3, MODERATE: 2, LOW: 1, NORMAL: 0 };
   const topBarangays = [...merged]
-    .filter(s => s.co2_density != null)
-    .sort((a, b) => b.co2_density - a.co2_density)
+    .filter(s => s.co2_density != null || s.carbon_level != null)
+    .sort((a, b) => {
+      const aRank = severityRank[(a.carbon_level || 'NORMAL').toUpperCase()] ?? 0;
+      const bRank = severityRank[(b.carbon_level || 'NORMAL').toUpperCase()] ?? 0;
+      if (bRank !== aRank) return bRank - aRank;
+      return (parseFloat(b.co2_density) || 0) - (parseFloat(a.co2_density) || 0);
+    })
     .slice(0, 5);
 
   const maxCO2 = topBarangays.length
     ? Math.max(...topBarangays.map(s => parseFloat(s.co2_density) || 0))
     : 1;
 
-  const trendUp   = topBarangays.length >= 2
+  // Trend: compare top two by co2_density value
+  const trendUp = topBarangays.length >= 2
     ? parseFloat(topBarangays[0].co2_density) > parseFloat(topBarangays[1].co2_density)
     : false;
-  const trendDiff = topBarangays.length >= 2
+  const trendDiff = topBarangays.length >= 2 && parseFloat(topBarangays[1].co2_density) !== 0
     ? Math.abs(
         ((parseFloat(topBarangays[0].co2_density) - parseFloat(topBarangays[1].co2_density))
           / parseFloat(topBarangays[1].co2_density)) * 100
       ).toFixed(1)
     : '0';
 
-  // ── Selected period label ───────────────────────────────────────────────────
   const periodLabel = selected
     ? `${MONTHS[selected.month]} ${selected.year}`
     : 'Loading…';
 
-  // ── Loading / error ─────────────────────────────────────────────────────────
+  // ── Loading / error ───────────────────────────────────────────────────────────
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -180,7 +212,6 @@ export default function Dashboard() {
     <SafeAreaView style={styles.container}>
       <View style={styles.statusBarPlaceholder} />
 
-      {/* Calendar Picker Modal */}
       <CalendarPicker
         visible={calendarVisible}
         onClose={() => setCalendarVisible(false)}
@@ -192,7 +223,7 @@ export default function Dashboard() {
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
 
-        {/* ── Header ──────────────────────────────────────────────────── */}
+        {/* ── Header ── */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>ENVI Analytics</Text>
           <TouchableOpacity style={styles.iconButton}>
@@ -200,7 +231,7 @@ export default function Dashboard() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Date Selector ────────────────────────────────────────────── */}
+        {/* ── Date Selector ── */}
         <TouchableOpacity style={styles.dateSelector} onPress={() => setCalendarVisible(true)}>
           <View style={styles.dateSelectorLeft}>
             <Calendar color="#FF5C4D" size={18} />
@@ -214,7 +245,7 @@ export default function Dashboard() {
           </View>
         </TouchableOpacity>
 
-        {/* ── No data for selected period ──────────────────────────────── */}
+        {/* ── No data state ── */}
         {!hasData ? (
           <View style={styles.noDataCard}>
             <Calendar color="#D1D5DB" size={40} />
@@ -240,7 +271,7 @@ export default function Dashboard() {
           </View>
         ) : (
           <>
-            {/* ── Metrics Grid ─────────────────────────────────────────── */}
+            {/* ── Metrics Grid ── */}
             <View style={styles.metricsGrid}>
               <View style={styles.row}>
                 <View style={styles.card}>
@@ -254,8 +285,9 @@ export default function Dashboard() {
                   <View style={[styles.iconCircle, { backgroundColor: '#EFF6FF' }]}>
                     <Wind color="#3B82F6" size={22} />
                   </View>
-                  <Text style={styles.metricValue}>{totalCO2.toFixed(0)}</Text>
-                  <Text style={styles.metricLabel}>Total CO₂ (ppm)</Text>
+                  {/* co2_density is a raw sensor index, NOT ppm */}
+                  <Text style={styles.metricValue}>{avgCO2Raw}</Text>
+                  <Text style={styles.metricLabel}>Avg CO₂ Index</Text>
                 </View>
               </View>
               <View style={styles.row}>
@@ -276,7 +308,7 @@ export default function Dashboard() {
               </View>
             </View>
 
-            {/* ── Carbon Level Pills ───────────────────────────────────── */}
+            {/* ── Carbon Level Pills ── */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Carbon Level Distribution</Text>
               <View style={styles.pillsRow}>
@@ -306,10 +338,10 @@ export default function Dashboard() {
               </View>
             </View>
 
-            {/* ── Top 5 Barangays ──────────────────────────────────────── */}
+            {/* ── Top 5 Barangays ── */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
-                Top {topBarangays.length} Barangays by CO₂ — {periodLabel}
+                Top {topBarangays.length} Barangays by Carbon Level — {periodLabel}
               </Text>
               {topBarangays.map((item, index) => {
                 const rank     = index + 1;
@@ -319,7 +351,7 @@ export default function Dashboard() {
                 const lvlColor = getCarbonColor(item.carbon_level);
 
                 return (
-                  <View key={item.sensor_id} style={styles.listItem}>
+                  <View key={`${item.sensor_id}-${item.data_id}`} style={styles.listItem}>
                     <View style={[styles.rankBadge, { backgroundColor: rank <= 3 ? color : '#F8F9FA' }]}>
                       <Text style={[styles.rankText, { color: rank <= 3 ? '#FFFFFF' : '#2D2D2D' }]}>
                         {rank}
@@ -328,7 +360,9 @@ export default function Dashboard() {
                     <View style={styles.progressContainer}>
                       <View style={styles.progressLabelRow}>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={styles.barangayName} numberOfLines={1}>{item.barangay_name}</Text>
+                          <Text style={styles.barangayName} numberOfLines={1}>
+                            {item.barangay_name || item.sensor_name || `Sensor ${item.sensor_id}`}
+                          </Text>
                           {item.carbon_level && (
                             <View style={[styles.inlineLevelBadge, { backgroundColor: lvlColor + '22' }]}>
                               <Text style={[styles.inlineLevelText, { color: lvlColor }]}>
@@ -337,7 +371,10 @@ export default function Dashboard() {
                             </View>
                           )}
                         </View>
-                        <Text style={styles.barangayValue}>{co2} ppm</Text>
+                        {/* Show raw CO2 index value, not labeled as ppm */}
+                        <Text style={styles.barangayValue}>
+                          {co2 > 0 ? formatCO2(item.co2_density) : '—'}
+                        </Text>
                       </View>
                       <View style={styles.progressBarBackground}>
                         <View style={[styles.progressBarFill, { backgroundColor: color, width: pct }]} />
@@ -355,25 +392,37 @@ export default function Dashboard() {
               })}
             </View>
 
-            {/* ── Footer Summary ───────────────────────────────────────── */}
+            {/* ── Footer Summary ── */}
             <View style={styles.footerContainer}>
               <View style={styles.footerHeader}>
                 <CloudFog color="#6B7280" size={20} />
-                <Text style={styles.footerLabel}>City-wide CO₂ — {periodLabel}</Text>
+                <Text style={styles.footerLabel}>Air Quality Summary — {periodLabel}</Text>
               </View>
-              <View style={styles.totalRow}>
-                <View style={styles.totalValueContainer}>
-                  <View style={[styles.arrowIconBox, { backgroundColor: trendUp ? '#FFF0EE' : '#F0FFF4' }]}>
-                    {trendUp
-                      ? <TrendingUp color="#FF5C4D" size={20} strokeWidth={2.5} />
-                      : <TrendingDown color="#10B981" size={20} strokeWidth={2.5} />}
-                  </View>
-                  <Text style={[styles.totalValueText, { color: trendUp ? '#FF5C4D' : '#10B981' }]}>
-                    {totalCO2.toFixed(0)}
-                  </Text>
+
+              {/* Show carbon level breakdown instead of misleading total CO2 */}
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryItem}>
+                  <Text style={[styles.summaryCount, { color: '#D64545' }]}>{carbonCounts['VERY HIGH']}</Text>
+                  <Text style={styles.summaryLabel}>Very High</Text>
                 </View>
-                <Text style={styles.totalLabelText}>ppm Total CO₂</Text>
+                <View style={styles.summaryItem}>
+                  <Text style={[styles.summaryCount, { color: '#E8A75D' }]}>{carbonCounts['HIGH']}</Text>
+                  <Text style={styles.summaryLabel}>High</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={[styles.summaryCount, { color: '#F59E0B' }]}>{carbonCounts['MODERATE']}</Text>
+                  <Text style={styles.summaryLabel}>Moderate</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={[styles.summaryCount, { color: '#3B82F6' }]}>{carbonCounts['LOW']}</Text>
+                  <Text style={styles.summaryLabel}>Low</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={[styles.summaryCount, { color: '#22C55E' }]}>{carbonCounts['NORMAL']}</Text>
+                  <Text style={styles.summaryLabel}>Normal</Text>
+                </View>
               </View>
+
               {topBarangays.length >= 2 && (
                 <View style={styles.comparisonRow}>
                   <View style={[styles.comparisonBadge, { backgroundColor: trendUp ? '#FFF0EE' : '#F0FFF4' }]}>
@@ -381,7 +430,7 @@ export default function Dashboard() {
                       {trendUp ? '↑' : '↓'} {trendDiff}%
                     </Text>
                   </View>
-                  <Text style={styles.comparisonLabel}>#1 vs #2 sensor</Text>
+                  <Text style={styles.comparisonLabel}>#1 vs #2 CO₂ index</Text>
                 </View>
               )}
             </View>
@@ -453,11 +502,12 @@ const styles = StyleSheet.create({
   footerContainer:       { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   footerHeader:          { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   footerLabel:           { fontSize: 14, fontWeight: '500', color: '#6B7280', marginLeft: 8 },
-  totalRow:              { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  totalValueContainer:   { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
-  arrowIconBox:          { padding: 8, borderRadius: 8, marginRight: 8 },
-  totalValueText:        { fontSize: 32, fontWeight: '700' },
-  totalLabelText:        { fontSize: 16, fontWeight: '500', color: '#6B7280' },
+
+  summaryGrid:           { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  summaryItem:           { alignItems: 'center', flex: 1 },
+  summaryCount:          { fontSize: 28, fontWeight: '700' },
+  summaryLabel:          { fontSize: 10, color: '#6B7280', fontWeight: '500', marginTop: 2, textAlign: 'center' },
+
   comparisonRow:         { flexDirection: 'row', alignItems: 'center' },
   comparisonBadge:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginRight: 8 },
   comparisonText:        { fontSize: 14, fontWeight: '700' },
