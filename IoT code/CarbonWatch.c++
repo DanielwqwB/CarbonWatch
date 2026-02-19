@@ -6,7 +6,7 @@
 
 // ---------- DHT22 ----------
 #define DHTPIN 4
-#define DHTTYPE DHT22 
+#define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
 // ---------- MQ-2 ----------
@@ -17,16 +17,17 @@ const float Ro = 10000.0;
 const float ADC_MAX = 4095.0; 
 
 // ---------- WiFi ----------
-const char* ssid = "(put_your_network_ssid_here)";
-const char* password = "(put_the_password_here)";
+const char* ssid = "wifi";
+const char* password = "password";
 const char* serverUrl = "https://bytetech-final1.onrender.com/create/sensor-data";
 
-// ---------- Sensor ID ----------
-const int sensor_id = 3;
+// ---------- Sensor Info ----------
+const int sensor_id = 1;
+const int barangay_id = 4;
 
 // ---------- NTP ----------
 const char* ntpServer = "pool.ntp.org";
-const long  gmtOffset_sec = 8 * 3600;   // Philippines GMT+8
+const long  gmtOffset_sec = 8 * 3600;   
 const int   daylightOffset_sec = 0;
 
 void setup() {
@@ -109,6 +110,7 @@ void loop() {
 
   StaticJsonDocument<256> json;
   json["sensor_id"] = sensor_id;
+  json["barangay_id"] = barangay_id;
   json["co2_density"] = co2_density;
   json["temperature_c"] = temperature_c;
   json["humidity"] = humidity;
