@@ -22,8 +22,8 @@ const SENSOR_DATA_API = 'https://bytetech-final1.onrender.com/sensor-data';
 const NAGA_CITY_CENTER = {
   latitude: 13.6218,
   longitude: 123.1948,
-  latitudeDelta: 0.005,
-  longitudeDelta: 0.005,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
 };
 
 // ─── Carbon level → colour ────────────────────────────────────────────────────
@@ -225,7 +225,22 @@ const MapScreen = () => {
          currentTab === 'Dashboard'  ? <DashboardScreen />  :
          currentTab === 'Reports'    ? <ReportsScreen />    :
          currentTab === 'Prediction' ? <PredictionScreen /> :
-                                       <PlacesScreen />}
+                                       <PlacesScreen onNavigateToMap={(item) => {
+                                         const lat = parseFloat(item.latitude);
+                                         const lng = parseFloat(item.longitude);
+                                         setSelectedSensor(item);
+                                         setCurrentTab('Map');
+                                         if (!isNaN(lat) && !isNaN(lng)) {
+                                           setTimeout(() => {
+                                             mapRef.current?.animateToRegion({
+                                               latitude: lat,
+                                               longitude: lng,
+                                               latitudeDelta: 0.01,
+                                               longitudeDelta: 0.01,
+                                             }, 800);
+                                           }, 300);
+                                         }
+                                       }} />}
       </View>
 
       {/* ── Sensor Info Card ────────────────────────────────────────────── */}
