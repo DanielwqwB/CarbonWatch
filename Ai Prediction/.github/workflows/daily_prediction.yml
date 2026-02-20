@@ -1,0 +1,76 @@
+name: Daily Prediction
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  predict:
+    name: Run Daily Prediction
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      DATABASE_URL:     mysql+aiomysql://${{ secrets.DB_USER }}:${{ secrets.DB_PASS }}@${{ secrets.DB_HOST }}:${{ secrets.DB_PORT }}/${{ secrets.DB_NAME }}
+      DB_HOST:          ${{ secrets.DB_HOST }}
+      DB_PORT:          ${{ secrets.DB_PORT }}
+      DB_NAME:          ${{ secrets.DB_NAME }}
+      DB_USER:          ${{ secrets.DB_USER }}
+      DB_PASS:          ${{ secrets.DB_PASS }}
+      GROQ_API_KEY:     ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL:       ${{ secrets.GROQ_MODEL }}
+      LLM_BACKEND:      ${{ secrets.LLM_BACKEND }}
+      DATA_FETCH_HOURS: ${{ secrets.DATA_FETCH_HOURS }}
+      MODEL_DIR:        ${{ secrets.MODEL_DIR }}
+      CA_CERT_PATH:     ${{ github.workspace }}/ca.pem
+      SCHEDULER_HOUR:   "1"
+      SCHEDULER_MINUTE: "0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate required secrets
+        run: |
+          missing=()
+          [ -z "$DB_HOST" ] && missing+=("DB_HOST")
+          [ -z "$DB_NAME" ] && missing+=("DB_NAME")
+          [ -z "$DB_USER" ] && missing+=("DB_USER")
+          [ -z "$DB_PASS" ] && missing+=("DB_PASS")
+          [ -z "$DB_PORT" ] && missing+=("DB_PORT")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets are present."
+
+      - name: Run daily prediction
+        run: |
+          cd $GITHUB_WORKSPACE
+          export PYTHONPATH=$GITHUB_WORKSPACE
+          python -m app.scheduler.daily_scheduler --run-now
+
+      - name: Upload prediction logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prediction-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 7
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Daily prediction FAILED on $(date -u '+%Y-%m-%d %H:%M UTC')"

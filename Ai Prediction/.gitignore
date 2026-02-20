@@ -1,15 +1,38 @@
-@"
+# Environment
 .env
-aiven-ca.pem
-models/
+*.env
+
+# Python
 __pycache__/
-data/
-backend/
-static/
-templates/
-*.keras
-*.pkl
-scaler.pkl
-test_mysql_ssl.py
-app.py
-"@ | Out-File -FilePath .gitignore -Encoding utf8
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# Model backups (keep main models, ignore backups)
+saved_models/backups/
+saved_models/retrain_temp.csv
+
+# Local tools
+predict_day.py
+db_predict.py
+ecosystem.config.js
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+__pycache__/
+
+*.pyc
+
+*.pyo

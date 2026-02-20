@@ -1,0 +1,129 @@
+name: Monthly Retrain
+
+on:
+  schedule:
+    - cron: "0 2 28 * *"  # 2:00 AM on the 28th of every month
+  workflow_dispatch:
+    inputs:
+      evaluate_only:
+        description: "Only evaluate models, skip retraining"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  retrain:
+    name: Monthly Model Retrain
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      DATABASE_URL:     ${{ secrets.DATABASE_URL }}
+      DB_HOST:          ${{ secrets.DB_HOST }}
+      DB_PORT:          ${{ secrets.DB_PORT }}
+      DB_NAME:          ${{ secrets.DB_NAME }}
+      DB_USER:          ${{ secrets.DB_USER }}
+      DB_PASS:          ${{ secrets.DB_PASS }}
+      MODEL_DIR:        ${{ secrets.MODEL_DIR }}
+      MIN_NEW_ROWS:     ${{ secrets.MIN_NEW_ROWS }}
+      DATA_FETCH_HOURS: ${{ secrets.DATA_FETCH_HOURS }}
+      RETRAIN_DAY:      ${{ secrets.RETRAIN_DAY }}
+      RETRAIN_HOUR:     ${{ secrets.RETRAIN_HOUR }}
+      RETRAIN_MINUTE:   ${{ secrets.RETRAIN_MINUTE }}
+      LLM_BACKEND:      ${{ secrets.LLM_BACKEND }}
+      GROQ_MODEL:       ${{ secrets.GROQ_MODEL }}
+      CA_CERT_PATH:     ${{ github.workspace }}/ca.pem
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Debug secrets presence
+        run: |
+          echo "DB_HOST set      : ${{ secrets.DB_HOST != '' }}"
+          echo "DB_PORT set      : ${{ secrets.DB_PORT != '' }}"
+          echo "DB_NAME set      : ${{ secrets.DB_NAME != '' }}"
+          echo "DB_USER set      : ${{ secrets.DB_USER != '' }}"
+          echo "DB_PASS set      : ${{ secrets.DB_PASS != '' }}"
+          echo "MIN_NEW_ROWS     : ${{ secrets.MIN_NEW_ROWS != '' }}"
+          echo "DATA_FETCH_HOURS : ${{ secrets.DATA_FETCH_HOURS != '' }}"
+          echo "MODEL_DIR        : ${{ secrets.MODEL_DIR != '' }}"
+          echo "ca.pem exists    : $(test -f ${{ github.workspace }}/ca.pem && echo YES || echo NO)"
+
+      - name: Debug env vars
+        run: |
+          echo "DB_HOST  empty? $([ -z "$DB_HOST"  ] && echo YES || echo NO)"
+          echo "DB_PORT  empty? $([ -z "$DB_PORT"  ] && echo YES || echo NO)"
+          echo "DB_NAME  empty? $([ -z "$DB_NAME"  ] && echo YES || echo NO)"
+          echo "DB_USER  empty? $([ -z "$DB_USER"  ] && echo YES || echo NO)"
+          echo "DB_PASS  empty? $([ -z "$DB_PASS"  ] && echo YES || echo NO)"
+          echo "MIN_NEW_ROWS     = $MIN_NEW_ROWS"
+          echo "DATA_FETCH_HOURS = $DATA_FETCH_HOURS"
+          echo "CA_CERT_PATH     = $CA_CERT_PATH"
+          echo "ca.pem exists?   $(test -f ca.pem && echo YES || echo NO)"
+
+      - name: Validate required secrets
+        run: |
+          missing=()
+          [ -z "$DB_HOST" ] && missing+=("DB_HOST")
+          [ -z "$DB_NAME" ] && missing+=("DB_NAME")
+          [ -z "$DB_USER" ] && missing+=("DB_USER")
+          [ -z "$DB_PASS" ] && missing+=("DB_PASS")
+          [ -z "$DB_PORT" ] && missing+=("DB_PORT")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets are present."
+
+      - name: Run retrain scheduler
+        run: |
+          cd $GITHUB_WORKSPACE
+          export PYTHONPATH=$GITHUB_WORKSPACE
+          if [ "${{ github.event.inputs.evaluate_only }}" == "true" ]; then
+            echo "Running in evaluate-only mode..."
+            python -m app.scheduler.retrain_scheduler --evaluate-only
+          else
+            echo "Running full retrain with accumulated data..."
+            python -m app.scheduler.retrain_scheduler --run-now
+          fi
+
+      - name: Commit retrain history
+        if: success()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add saved_models/retrain_history.csv || true
+          git diff --cached --quiet || git commit -m "chore: update retrain history [$(date -u '+%Y-%m-%d')]"
+          git push || echo "Nothing to push"
+
+      - name: Upload retrain artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrain-results-${{ github.run_id }}
+          path: |
+            saved_models/retrain_history.csv
+            saved_models/*.keras
+            saved_models/*.pkl
+            logs/
+          retention-days: 30
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Monthly retrain FAILED on $(date -u '+%Y-%m-%d %H:%M UTC')"
