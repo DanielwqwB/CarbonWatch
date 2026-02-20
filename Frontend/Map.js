@@ -11,7 +11,7 @@ import * as Icons from 'lucide-react-native';
 import DashboardScreen from './dashboard';
 import ReportsScreen from './reports';
 import PredictionScreen from './prediction';
-import PlacesScreen from './places';
+import PlacesScreen from './Establishments';
 
 const { width } = Dimensions.get('window');
 const LOGO_IMG = require('./assets/image.png');
