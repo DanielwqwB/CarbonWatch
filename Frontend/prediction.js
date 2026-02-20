@@ -8,18 +8,15 @@ import { Feather } from '@expo/vector-icons';
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 const historyUrl = (nodeId) =>
-  nodeId === 'all'
-    ? 'https://ai-prediction-jwnp.onrender.com/api/predictions/history'
-    : `https://ai-prediction-jwnp.onrender.com/api/predictions/history?node_id=${nodeId}`;
+  `https://ai-prediction-jwnp.onrender.com/api/predictions/history?node_id=${nodeId}`;
 
 const INSIGHTS_URL = 'https://ai-prediction-jwnp.onrender.com/api/insights/latest';
 
 // ─── Nodes ────────────────────────────────────────────────────────────────────
 const NODES = [
-  { id: 'all', label: 'All Nodes', icon: 'layers' },
-  { id: '1',   label: 'Abella',   icon: 'radio'  },
-  { id: '2',   label: 'Node 2',   icon: 'radio'  },
-  { id: '3',   label: 'Node 3',   icon: 'radio'  },
+  { id: '1', label: 'Abella', icon: 'radio' },
+  { id: '2', label: 'Node 2', icon: 'radio' },
+  { id: '3', label: 'Node 3', icon: 'radio' },
 ];
 
 const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -52,15 +49,42 @@ const deriveStatus = (co2) => {
 const statusColor = (s) =>
   ({ green: '#10B981', yellow: '#FBBF24', orange: '#F59E0B', red: '#FF5C4D', gray: '#9CA3AF' }[s?.color] ?? '#9CA3AF');
 
-// Group flat prediction array into { "2026-02-20": { co2, temp, humidity } }
-// Optionally filters by nodeId client-side as a fallback
-const groupByDate = (predictions, nodeId) => {
-  const filtered = nodeId === 'all'
-    ? predictions
-    : predictions.filter(p => String(p.node_id) === String(nodeId));
+// Average numeric values, ignoring nulls
+const avgOf = (arr) => {
+  const valid = arr.filter(v => v != null);
+  if (!valid.length) return null;
+  return valid.reduce((a, b) => a + b, 0) / valid.length;
+};
 
+// Merge multiple node day-data objects into one combined entry
+const mergeDayData = (entries) => {
+  if (!entries.length) return null;
+  const first = entries[0];
+  return {
+    runAt: first.runAt,
+    model: first.model,
+    co2: {
+      mean: avgOf(entries.map(e => e.co2?.mean)),
+      min:  avgOf(entries.map(e => e.co2?.min)),
+      max:  avgOf(entries.map(e => e.co2?.max)),
+    },
+    temp: {
+      mean: avgOf(entries.map(e => e.temp?.mean)),
+      min:  avgOf(entries.map(e => e.temp?.min)),
+      max:  avgOf(entries.map(e => e.temp?.max)),
+    },
+    hum: {
+      mean: avgOf(entries.map(e => e.hum?.mean)),
+      min:  avgOf(entries.map(e => e.hum?.min)),
+      max:  avgOf(entries.map(e => e.hum?.max)),
+    },
+  };
+};
+
+// Group flat prediction array into { "2026-02-20": { co2, temp, humidity } }
+const groupByDate = (predictions) => {
   const map = {};
-  filtered.forEach((p) => {
+  predictions.forEach((p) => {
     if (!map[p.prediction_date]) map[p.prediction_date] = { runAt: p.run_at, model: p.model_used };
     if (p.target === 'co2_density')   map[p.prediction_date].co2  = p;
     if (p.target === 'temperature_c') map[p.prediction_date].temp = p;
@@ -118,7 +142,6 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={cal.overlay}>
         <View style={cal.sheet}>
-          {/* Header */}
           <View style={cal.header}>
             <Text style={cal.title}>Pick a Date</Text>
             <TouchableOpacity onPress={onClose} style={cal.closeBtn}>
@@ -126,7 +149,6 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
             </TouchableOpacity>
           </View>
 
-          {/* Month nav */}
           <View style={cal.monthNav}>
             <TouchableOpacity onPress={prevMonth} style={cal.navBtn}>
               <Feather name="chevron-left" size={20} color="#374151" />
@@ -137,12 +159,10 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
             </TouchableOpacity>
           </View>
 
-          {/* Day labels */}
           <View style={cal.dayLabelsRow}>
             {DAYS.map(d => <Text key={d} style={cal.dayLabel}>{d}</Text>)}
           </View>
 
-          {/* Grid */}
           <View style={cal.grid}>
             {cells.map((day, i) => {
               if (!day) return <View key={`blank-${i}`} style={cal.cell} />;
@@ -175,7 +195,6 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
             })}
           </View>
 
-          {/* Legend */}
           <View style={cal.legend}>
             <View style={cal.legendItem}>
               <View style={[cal.legendDot, { backgroundColor: '#FF5C4D' }]} />
@@ -194,45 +213,65 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function PredictionScreen() {
-  const [selectedNode, setSelectedNode] = useState('all');
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  // Multi-select: array of node IDs. Default = first node selected.
+  const [selectedNodes, setSelectedNodes] = useState(['1']);
+  const [calendarOpen, setCalendarOpen]   = useState(false);
 
-  const [historyMap,   setHistoryMap]   = useState({});
-  const [availDates,   setAvailDates]   = useState([]);
-  const [selectedDate, setSelectedDate] = useState(null);
+  // Per-node history maps: { nodeId: { date: dayData } }
+  const [nodeHistoryMaps, setNodeHistoryMaps] = useState({});
+  const [availDates,      setAvailDates]      = useState([]);
+  const [selectedDate,    setSelectedDate]    = useState(null);
 
   const [insightData, setInsightData] = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
 
-  // ── Reset when node changes ──────────────────────────────────────────────────
-  useEffect(() => {
-    setSelectedDate(null);
-    setHistoryMap({});
-    setAvailDates([]);
-  }, [selectedNode]);
+  // ── Toggle a node in/out of selection ──────────────────────────────────────
+  const toggleNode = (nodeId) => {
+    setSelectedNodes(prev => {
+      if (prev.includes(nodeId)) {
+        // Prevent deselecting the last node
+        if (prev.length === 1) return prev;
+        return prev.filter(id => id !== nodeId);
+      }
+      return [...prev, nodeId];
+    });
+  };
 
-  // ── Fetch all history + latest insight ──────────────────────────────────────
+  // ── Fetch history for all selected nodes + latest insight ──────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [histRes, insRes] = await Promise.all([
-        fetch(historyUrl(selectedNode)),   // ← uses selectedNode
-        fetch(INSIGHTS_URL),
+      const fetches = selectedNodes.map(id =>
+        fetch(historyUrl(id)).then(r => {
+          if (!r.ok) throw new Error(`Failed to fetch node ${id}`);
+          return r.json().then(j => ({ id, predictions: j.predictions ?? [] }));
+        })
+      );
+      const insightFetch = fetch(INSIGHTS_URL).then(r => {
+        if (!r.ok) throw new Error('Failed to fetch insights');
+        return r.json();
+      });
+
+      const [nodeResults, insJson] = await Promise.all([
+        Promise.all(fetches),
+        insightFetch,
       ]);
-      if (!histRes.ok) throw new Error('Failed to fetch history');
-      if (!insRes.ok)  throw new Error('Failed to fetch insights');
 
-      const histJson = await histRes.json();
-      const insJson  = await insRes.json();
+      // Build per-node history maps
+      const maps = {};
+      nodeResults.forEach(({ id, predictions }) => {
+        maps[id] = groupByDate(predictions);
+      });
+      setNodeHistoryMaps(maps);
 
-      // groupByDate also filters client-side as a fallback
-      const grouped = groupByDate(histJson.predictions ?? [], selectedNode);
-      const dates   = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+      // Union of all available dates across selected nodes
+      const allDates = new Set();
+      Object.values(maps).forEach(m => Object.keys(m).forEach(d => allDates.add(d)));
+      const dates = Array.from(allDates).sort((a, b) => b.localeCompare(a));
 
-      setHistoryMap(grouped);
       setAvailDates(dates);
-      setSelectedDate(dates[0] ?? null);   // ← always reset to latest for this node
+      setSelectedDate(dates[0] ?? null);
 
       setInsightData({
         barangay: insJson.barangay,
@@ -247,7 +286,13 @@ export default function PredictionScreen() {
     } finally {
       setLoading(false);
     }
-  }, [selectedNode]);   // ← selectedNode is now a dependency
+  }, [selectedNodes]);
+
+  useEffect(() => {
+    setSelectedDate(null);
+    setAvailDates([]);
+    setNodeHistoryMaps({});
+  }, [selectedNodes]);
 
   useEffect(() => {
     fetchAll();
@@ -255,12 +300,19 @@ export default function PredictionScreen() {
     return () => clearInterval(iv);
   }, [fetchAll]);
 
-  // ── Derive display data from selected date ───────────────────────────────────
-  const dayData = selectedDate ? historyMap[selectedDate] : null;
-  const co2     = dayData?.co2?.mean  ?? null;
-  const temp    = dayData?.temp?.mean ?? null;
-  const hum     = dayData?.hum?.mean  ?? null;
-  const status  = deriveStatus(co2);
+  // ── Merge data for selected date across selected nodes ─────────────────────
+  const dayData = (() => {
+    if (!selectedDate) return null;
+    const entries = selectedNodes
+      .map(id => nodeHistoryMaps[id]?.[selectedDate])
+      .filter(Boolean);
+    return mergeDayData(entries);
+  })();
+
+  const co2  = dayData?.co2?.mean ?? null;
+  const temp = dayData?.temp?.mean ?? null;
+  const hum  = dayData?.hum?.mean ?? null;
+  const status = deriveStatus(co2);
 
   const baseTemp = temp ?? 25;
   const baseCO2  = co2  ?? 403;
@@ -297,6 +349,11 @@ export default function PredictionScreen() {
     if (idx > 0) setSelectedDate(availDates[idx - 1]);
   };
 
+  const selectedNodeLabels = NODES
+    .filter(n => selectedNodes.includes(n.id))
+    .map(n => n.label)
+    .join(', ');
+
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -330,25 +387,34 @@ export default function PredictionScreen() {
         </View>
       </View>
 
-      {/* ── Node filter ── */}
+      {/* ── Node multi-select filter ── */}
       <View style={styles.filterWrapper}>
+        <Text style={styles.filterLabel}>Select Nodes</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           {NODES.map((node) => {
-            const active = selectedNode === node.id;
+            const active = selectedNodes.includes(node.id);
             return (
               <TouchableOpacity
                 key={node.id}
                 style={[styles.filterChip, active && styles.filterChipActive]}
-                onPress={() => setSelectedNode(node.id)}
+                onPress={() => toggleNode(node.id)}
               >
                 <Feather name={node.icon} size={12} color={active ? '#FFF' : '#6B7280'} style={{ marginRight: 5 }} />
                 <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
                   {node.label}
                 </Text>
+                {active && (
+                  <View style={styles.checkBadge}>
+                    <Feather name="check" size={9} color="#FF5C4D" />
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
         </ScrollView>
+        {selectedNodes.length > 1 && (
+          <Text style={styles.filterHint}>Showing averaged data for {selectedNodes.length} nodes</Text>
+        )}
       </View>
 
       {/* ── Date navigator ── */}
@@ -394,19 +460,50 @@ export default function PredictionScreen() {
           <View style={styles.emptyCard}>
             <Feather name="inbox" size={36} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>No Data</Text>
-            <Text style={styles.emptyText}>No predictions found for this node/date.</Text>
+            <Text style={styles.emptyText}>No predictions found for the selected node(s) on this date.</Text>
           </View>
         )}
 
         {dayData && (
           <>
-            {/* Run info pill */}
+            {/* Node + run info pill */}
             <View style={styles.runInfoRow}>
               <Feather name="cpu" size={12} color="#9CA3AF" style={{ marginRight: 5 }} />
               <Text style={styles.runInfoText}>
-                Model: {dayData.model ?? 'LSTM'} · Ran {fmtTime(dayData.runAt)}
+                {selectedNodeLabels} · Model: {dayData.model ?? 'LSTM'} · Ran {fmtTime(dayData.runAt)}
               </Text>
             </View>
+
+            {/* Per-node quick summary (when multiple selected) */}
+            {selectedNodes.length > 1 && (
+              <View style={styles.nodeBreakdownCard}>
+                <Text style={styles.nodeBreakdownTitle}>Per-Node Summary</Text>
+                {selectedNodes.map(id => {
+                  const node = NODES.find(n => n.id === id);
+                  const nd   = nodeHistoryMaps[id]?.[selectedDate];
+                  if (!nd) return (
+                    <View key={id} style={styles.nodeBreakdownRow}>
+                      <View style={styles.nodeBreakdownLeft}>
+                        <Feather name="radio" size={13} color="#D1D5DB" style={{ marginRight: 7 }} />
+                        <Text style={styles.nodeBreakdownName}>{node?.label ?? `Node ${id}`}</Text>
+                      </View>
+                      <Text style={styles.nodeBreakdownNoData}>No data</Text>
+                    </View>
+                  );
+                  return (
+                    <View key={id} style={styles.nodeBreakdownRow}>
+                      <View style={styles.nodeBreakdownLeft}>
+                        <View style={[styles.nodeBreakdownDot, { backgroundColor: statusColor(deriveStatus(nd.co2?.mean)) }]} />
+                        <Text style={styles.nodeBreakdownName}>{node?.label ?? `Node ${id}`}</Text>
+                      </View>
+                      <Text style={styles.nodeBreakdownMeta}>
+                        CO₂ {fmt(nd.co2?.mean, 0)} · {fmt(nd.temp?.mean)}°C · {fmt(nd.hum?.mean, 0)}%
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
 
             {/* ── Metric cards ── */}
             <View style={styles.metricsRow}>
@@ -488,7 +585,10 @@ export default function PredictionScreen() {
           <View style={styles.historyCard}>
             <Text style={styles.historyTitle}>📅 All Reports</Text>
             {availDates.map((date) => {
-              const d   = historyMap[date];
+              const entries = selectedNodes
+                .map(id => nodeHistoryMaps[id]?.[date])
+                .filter(Boolean);
+              const merged = mergeDayData(entries);
               const sel = date === selectedDate;
               return (
                 <TouchableOpacity
@@ -497,13 +597,13 @@ export default function PredictionScreen() {
                   onPress={() => setSelectedDate(date)}
                 >
                   <View style={styles.historyRowLeft}>
-                    <View style={[styles.historyDot, { backgroundColor: statusColor(deriveStatus(d?.co2?.mean)) }]} />
+                    <View style={[styles.historyDot, { backgroundColor: statusColor(deriveStatus(merged?.co2?.mean)) }]} />
                     <View>
                       <Text style={[styles.historyDate, sel && styles.historyDateActive]}>
                         {fmtDate(date)}
                       </Text>
                       <Text style={styles.historyMeta}>
-                        CO₂ {fmt(d?.co2?.mean, 0)} ppm · {fmt(d?.temp?.mean)} °C · {fmt(d?.hum?.mean, 0)}%
+                        CO₂ {fmt(merged?.co2?.mean, 0)} ppm · {fmt(merged?.temp?.mean)} °C · {fmt(merged?.hum?.mean, 0)}%
                       </Text>
                     </View>
                   </View>
@@ -559,10 +659,15 @@ const styles = StyleSheet.create({
   liveText: { fontSize: 11, fontWeight: '700', color: '#FF5C4D', letterSpacing: 0.8 },
 
   filterWrapper: {
-    backgroundColor: '#FFFFFF', paddingBottom: 12,
+    backgroundColor: '#FFFFFF', paddingBottom: 10,
     borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
   },
-  filterScroll:         { paddingHorizontal: 16, paddingTop: 10, flexDirection: 'row' },
+  filterLabel: {
+    fontSize: 11, fontWeight: '700', color: '#9CA3AF',
+    letterSpacing: 0.8, textTransform: 'uppercase',
+    paddingHorizontal: 16, paddingTop: 10, marginBottom: 6,
+  },
+  filterScroll:         { paddingHorizontal: 16, flexDirection: 'row' },
   filterChip: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 8,
@@ -572,6 +677,14 @@ const styles = StyleSheet.create({
   filterChipActive:     { backgroundColor: '#FF5C4D', borderColor: '#FF5C4D' },
   filterChipText:       { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   filterChipTextActive: { color: '#FFFFFF' },
+  checkBadge: {
+    marginLeft: 5, width: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center',
+  },
+  filterHint: {
+    fontSize: 11, color: '#9CA3AF', paddingHorizontal: 16,
+    marginTop: 6, fontStyle: 'italic',
+  },
 
   dateNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -610,7 +723,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     marginBottom: 12, paddingHorizontal: 2,
   },
-  runInfoText: { fontSize: 12, color: '#9CA3AF' },
+  runInfoText: { fontSize: 12, color: '#9CA3AF', flexShrink: 1 },
+
+  // Per-node breakdown (multi-select)
+  nodeBreakdownCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
+    marginBottom: 14, borderLeftWidth: 3, borderLeftColor: '#E5E7EB',
+  },
+  nodeBreakdownTitle: { fontSize: 12, fontWeight: '700', color: '#9CA3AF', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.6 },
+  nodeBreakdownRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  nodeBreakdownLeft:  { flexDirection: 'row', alignItems: 'center' },
+  nodeBreakdownDot:   { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  nodeBreakdownName:  { fontSize: 13, fontWeight: '600', color: '#374151' },
+  nodeBreakdownMeta:  { fontSize: 11, color: '#9CA3AF' },
+  nodeBreakdownNoData:{ fontSize: 11, color: '#D1D5DB', fontStyle: 'italic' },
 
   metricsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   metricCard: {
