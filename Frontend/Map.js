@@ -22,8 +22,8 @@ const SENSOR_DATA_API = 'https://bytetech-final1.onrender.com/sensor-data';
 const NAGA_CITY_CENTER = {
   latitude: 13.6218,
   longitude: 123.1948,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
+  latitudeDelta: 0.005,
+  longitudeDelta: 0.005,
 };
 
 // ─── Carbon level → colour ────────────────────────────────────────────────────

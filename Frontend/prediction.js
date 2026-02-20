@@ -7,7 +7,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 // ─── API ──────────────────────────────────────────────────────────────────────
-const HISTORY_URL  = 'https://ai-prediction-jwnp.onrender.com/api/predictions/history';
+const historyUrl = (nodeId) =>
+  nodeId === 'all'
+    ? 'https://ai-prediction-jwnp.onrender.com/api/predictions/history'
+    : `https://ai-prediction-jwnp.onrender.com/api/predictions/history?node_id=${nodeId}`;
+
 const INSIGHTS_URL = 'https://ai-prediction-jwnp.onrender.com/api/insights/latest';
 
 // ─── Nodes ────────────────────────────────────────────────────────────────────
@@ -49,11 +53,16 @@ const statusColor = (s) =>
   ({ green: '#10B981', yellow: '#FBBF24', orange: '#F59E0B', red: '#FF5C4D', gray: '#9CA3AF' }[s?.color] ?? '#9CA3AF');
 
 // Group flat prediction array into { "2026-02-20": { co2, temp, humidity } }
-const groupByDate = (predictions) => {
+// Optionally filters by nodeId client-side as a fallback
+const groupByDate = (predictions, nodeId) => {
+  const filtered = nodeId === 'all'
+    ? predictions
+    : predictions.filter(p => String(p.node_id) === String(nodeId));
+
   const map = {};
-  predictions.forEach((p) => {
+  filtered.forEach((p) => {
     if (!map[p.prediction_date]) map[p.prediction_date] = { runAt: p.run_at, model: p.model_used };
-    if (p.target === 'co2_density')  map[p.prediction_date].co2  = p;
+    if (p.target === 'co2_density')   map[p.prediction_date].co2  = p;
     if (p.target === 'temperature_c') map[p.prediction_date].temp = p;
     if (p.target === 'humidity')      map[p.prediction_date].hum  = p;
   });
@@ -102,7 +111,6 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const cells = [];
 
-  // Blank cells before first day
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
@@ -189,20 +197,27 @@ export default function PredictionScreen() {
   const [selectedNode, setSelectedNode] = useState('all');
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  // All history keyed by date
-  const [historyMap,  setHistoryMap]  = useState({});
-  const [availDates,  setAvailDates]  = useState([]);
-  const [selectedDate, setSelectedDate] = useState(null);   // null = today/latest
+  const [historyMap,   setHistoryMap]   = useState({});
+  const [availDates,   setAvailDates]   = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
 
   const [insightData, setInsightData] = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
 
+  // ── Reset when node changes ──────────────────────────────────────────────────
+  useEffect(() => {
+    setSelectedDate(null);
+    setHistoryMap({});
+    setAvailDates([]);
+  }, [selectedNode]);
+
   // ── Fetch all history + latest insight ──────────────────────────────────────
   const fetchAll = useCallback(async () => {
+    setLoading(true);
     try {
       const [histRes, insRes] = await Promise.all([
-        fetch(HISTORY_URL),
+        fetch(historyUrl(selectedNode)),   // ← uses selectedNode
         fetch(INSIGHTS_URL),
       ]);
       if (!histRes.ok) throw new Error('Failed to fetch history');
@@ -211,20 +226,19 @@ export default function PredictionScreen() {
       const histJson = await histRes.json();
       const insJson  = await insRes.json();
 
-      const grouped = groupByDate(histJson.predictions ?? []);
-      const dates   = Object.keys(grouped).sort((a, b) => b.localeCompare(a)); // newest first
+      // groupByDate also filters client-side as a fallback
+      const grouped = groupByDate(histJson.predictions ?? [], selectedNode);
+      const dates   = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
       setHistoryMap(grouped);
       setAvailDates(dates);
-
-      // Default to the most recent date
-      if (!selectedDate && dates.length > 0) setSelectedDate(dates[0]);
+      setSelectedDate(dates[0] ?? null);   // ← always reset to latest for this node
 
       setInsightData({
-        barangay:   insJson.barangay,
-        text:       insJson.insight_text,
-        date:       insJson.prediction_date,
-        runAt:      insJson.run_at,
+        barangay: insJson.barangay,
+        text:     insJson.insight_text,
+        date:     insJson.prediction_date,
+        runAt:    insJson.run_at,
       });
 
       setError(null);
@@ -233,7 +247,7 @@ export default function PredictionScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);   // eslint-disable-line
+  }, [selectedNode]);   // ← selectedNode is now a dependency
 
   useEffect(() => {
     fetchAll();
@@ -248,7 +262,6 @@ export default function PredictionScreen() {
   const hum     = dayData?.hum?.mean  ?? null;
   const status  = deriveStatus(co2);
 
-  // Simulated hourly curves from the day's mean values
   const baseTemp = temp ?? 25;
   const baseCO2  = co2  ?? 403;
 
@@ -381,7 +394,7 @@ export default function PredictionScreen() {
           <View style={styles.emptyCard}>
             <Feather name="inbox" size={36} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>No Data</Text>
-            <Text style={styles.emptyText}>No predictions found for this date.</Text>
+            <Text style={styles.emptyText}>No predictions found for this node/date.</Text>
           </View>
         )}
 
@@ -545,7 +558,6 @@ const styles = StyleSheet.create({
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FF5C4D' },
   liveText: { fontSize: 11, fontWeight: '700', color: '#FF5C4D', letterSpacing: 0.8 },
 
-  // Node filter
   filterWrapper: {
     backgroundColor: '#FFFFFF', paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
@@ -561,7 +573,6 @@ const styles = StyleSheet.create({
   filterChipText:       { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   filterChipTextActive: { color: '#FFFFFF' },
 
-  // Date navigator
   dateNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 10,
@@ -578,10 +589,8 @@ const styles = StyleSheet.create({
   },
   dateNavText: { fontSize: 15, fontWeight: '700', color: '#111827' },
 
-  // Content
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36 },
 
-  // Error
   errorCard: {
     backgroundColor: '#FEF3C7', padding: 14, borderRadius: 12, marginBottom: 14,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -590,7 +599,6 @@ const styles = StyleSheet.create({
   retryButton: { backgroundColor: '#FBBF24', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
   retryText:   { color: '#78350F', fontWeight: '700', fontSize: 13 },
 
-  // Empty
   emptyCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 40,
     alignItems: 'center', marginBottom: 14,
@@ -598,14 +606,12 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151', marginTop: 12, marginBottom: 4 },
   emptyText:  { fontSize: 13, color: '#9CA3AF', textAlign: 'center' },
 
-  // Run info
   runInfoRow: {
     flexDirection: 'row', alignItems: 'center',
     marginBottom: 12, paddingHorizontal: 2,
   },
   runInfoText: { fontSize: 12, color: '#9CA3AF' },
 
-  // Metric cards
   metricsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   metricCard: {
     flex: 1, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
@@ -621,7 +627,6 @@ const styles = StyleSheet.create({
   metricUnit:  { fontSize: 11, color: '#9CA3AF', marginTop: 2, marginBottom: 6 },
   metricRange: { fontSize: 9, color: '#D1D5DB', fontWeight: '500', textAlign: 'center' },
 
-  // Status
   statusBadge: {
     padding: 16, borderRadius: 14, alignItems: 'center', marginBottom: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
@@ -630,7 +635,6 @@ const styles = StyleSheet.create({
   statusLabel:   { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 3 },
   statusMessage: { fontSize: 13, color: '#FFFFFF', opacity: 0.9 },
 
-  // Charts
   chartCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
@@ -647,7 +651,6 @@ const styles = StyleSheet.create({
   barFill:        { width: '100%', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   barBottomLabel: { fontSize: 9, color: '#9CA3AF', marginTop: 5, textAlign: 'center' },
 
-  // Insight
   insightCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
@@ -664,7 +667,6 @@ const styles = StyleSheet.create({
   insightDivider: { height: 1, backgroundColor: '#F3F4F6', marginBottom: 12 },
   insightBody:    { fontSize: 14, color: '#374151', lineHeight: 22 },
 
-  // History list
   historyCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
@@ -682,7 +684,6 @@ const styles = StyleSheet.create({
   historyDateActive:{ color: '#FF5C4D' },
   historyMeta:      { fontSize: 11, color: '#9CA3AF' },
 
-  // Refresh footer
   refreshFooter:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, marginTop: 4 },
   refreshFooterText: { fontSize: 12, color: '#9CA3AF' },
 });
@@ -711,9 +712,7 @@ const cal = StyleSheet.create({
   navBtn:     { padding: 8, borderRadius: 10, backgroundColor: '#F9FAFB' },
   monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827' },
 
-  dayLabelsRow: {
-    flexDirection: 'row', marginBottom: 8,
-  },
+  dayLabelsRow: { flexDirection: 'row', marginBottom: 8 },
   dayLabel: {
     flex: 1, textAlign: 'center',
     fontSize: 12, fontWeight: '600', color: '#9CA3AF',

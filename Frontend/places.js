@@ -14,7 +14,7 @@ const SENSOR_DATA_API = 'https://bytetech-final1.onrender.com/sensor-data';
 /** How often (in ms) to auto-refresh */
 const REFRESH_INTERVAL_MS = 30_000; // 30 seconds
 
-// ─── Track previous CO₂ values for trend badges ─────────────────────────────
+// ─── Track previo us CO₂ values for trend badges ─────────────────────────────
 const previousValues = {};
 
 const calculatePercentageChange = (current, previous) => {
