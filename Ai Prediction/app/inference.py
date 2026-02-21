@@ -1,19 +1,11 @@
-"""
-Model Inference Engine — FIXED
-================================
-Fix: predict_with_lstm() now loads per-target scaler_X instead of shared one.
-Fix 2: predict_all() now passes df_featured (not df_raw) to predict_with_lstm().
-"""
-
 import numpy as np
 import pandas as pd
 import pickle
 import logging
-from datetime import datetime, timedelta
+import time
+from datetime import timedelta
 from pathlib import Path
 
-import sys
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 from app.pipeline.config import (
     TARGET_COLS, SEQUENCE_LENGTH, PREDICTION_HORIZON,
     MODEL_DIR, get_model_path, LOCATION
@@ -23,28 +15,22 @@ from app.pipeline.sequence_builder import inverse_transform_predictions
 
 logger = logging.getLogger(__name__)
 
-
-# ============================================================================
-# HELPERS
-# ============================================================================
-
-def get_model_key(prefix: str, target: str) -> str:
+def get_model_key(target: str) -> str:
     if target.startswith("co2"):
-        return f"{prefix}_co2"
+        return "lstm_co2"
     elif target.startswith("temp"):
-        return f"{prefix}_temperature"
+        return "lstm_temperature"
     elif target.startswith("humid"):
-        return f"{prefix}_humidity"
+        return "lstm_humidity"
     else:
         raise ValueError(f"Unknown target: {target}")
 
-
 def get_unit(target: str) -> str:
-    if "temp" in target:    return "°C"
-    elif "humid" in target: return "%"
-    elif "co2" in target:   return "ppm"
+    if "temp"  in target: return "°C"
+    if "humid" in target: return "%"
+    if "co2"   in target: return "ppm"
+    logger.warning(f"get_unit: unknown target '{target}' — returning empty unit.")
     return ""
-
 
 def is_model_file_valid(path: str) -> tuple:
     p = Path(path)
@@ -53,11 +39,6 @@ def is_model_file_valid(path: str) -> tuple:
     if p.stat().st_size == 0:
         return False, f"File is empty: {path}"
     return True, "ok"
-
-
-# ============================================================================
-# FIX: per-target scaler_X loader (bypasses MODEL_NAMES registry)
-# ============================================================================
 
 def _load_scaler_X(target: str):
     per_target_path = MODEL_DIR / f"scaler_X_{target}.pkl"
@@ -69,34 +50,32 @@ def _load_scaler_X(target: str):
     try:
         shared_path = get_model_path("scaler_X")
         if shared_path.exists():
-            logger.warning(f"Per-target scaler_X not found for {target}, using shared scaler_X")
+            logger.warning(f"Per-target scaler_X not found for {target}, falling back to shared scaler_X")
             with open(shared_path, "rb") as f:
                 return pickle.load(f)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to load shared scaler_X for target '{target}': {e}")
 
-    logger.error(f"No scaler_X found for target '{target}'")
+    logger.error(f"No scaler_X found for target '{target}' — train.py may not have run")
     return None
 
-
-# ============================================================================
-# MODEL REGISTRY
-# ============================================================================
+_MODEL_TTL_SECONDS = 3600
 
 class ModelRegistry:
-    """Lazy-loads and caches all trained models."""
-
     _instance = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._loaded = {}
+            cls._instance._loaded    = {}
+            cls._instance._load_time = {}
         return cls._instance
 
     def get(self, key: str):
-        if key not in self._loaded:
-            self._loaded[key] = self._load(key)
+        age = time.time() - self._load_time.get(key, 0)
+        if key not in self._loaded or age > _MODEL_TTL_SECONDS:
+            self._loaded[key]    = self._load(key)
+            self._load_time[key] = time.time()
         return self._loaded[key]
 
     def _load(self, key: str):
@@ -108,7 +87,7 @@ class ModelRegistry:
 
         valid, reason = is_model_file_valid(path)
         if not valid:
-            logger.error(f"[Registry] Cannot load '{key}': {reason}")
+            logger.error(f"Cannot load '{key}': {reason}")
             return None
 
         suffix = Path(path).suffix.lower()
@@ -131,6 +110,7 @@ class ModelRegistry:
 
     def reload_all(self):
         self._loaded.clear()
+        self._load_time.clear()
         logger.info("Model registry cleared.")
 
     def status(self) -> dict:
@@ -150,21 +130,10 @@ class ModelRegistry:
                 report[key] = {"file": filename, "exists": False, "error": str(e)}
         return report
 
-
 registry = ModelRegistry()
 
-
-# ============================================================================
-# PREDICTION FUNCTIONS
-# ============================================================================
-
 def predict_with_lstm(df_featured: pd.DataFrame, target: str) -> dict:
-    """
-    Run LSTM prediction — expects df_featured (post build_features).
-    Returns all 24 hourly predictions.
-    """
-
-    model_key    = get_model_key("lstm", target)
+    model_key    = get_model_key(target)
     scaler_y_key = f"scaler_{target}"
 
     model     = registry.get(model_key)
@@ -178,15 +147,17 @@ def predict_with_lstm(df_featured: pd.DataFrame, target: str) -> dict:
         if scaler_X  is None: missing.append("scaler_X")
         if scaler_y  is None: missing.append("scaler_y")
         if feat_cols is None: missing.append("feature_cols")
+        logger.error(f"Missing components for '{target}': {missing}")
         return {"error": f"Missing for '{target}': {missing}. Run train.py first."}
 
-    # Guard: ensure all feat_cols exist in df_featured
     missing_cols = [c for c in feat_cols if c not in df_featured.columns]
     if missing_cols:
+        logger.error(f"Missing feature columns for '{target}': {missing_cols}")
         return {"error": f"Missing feature columns for '{target}': {missing_cols[:5]}..."}
 
     X = df_featured[feat_cols].values[-SEQUENCE_LENGTH:]
     if len(X) < SEQUENCE_LENGTH:
+        logger.error(f"Insufficient rows for '{target}': need {SEQUENCE_LENGTH}, got {len(X)}")
         return {"error": f"Need {SEQUENCE_LENGTH} rows. Got {len(X)}."}
 
     X_scaled = scaler_X.transform(X)
@@ -218,36 +189,18 @@ def predict_with_lstm(df_featured: pd.DataFrame, target: str) -> dict:
         },
     }
 
+def predict_all(df_recent: pd.DataFrame, df_featured: pd.DataFrame) -> dict:
 
-# ============================================================================
-# FULL PREDICTION — all 3 targets
-# ============================================================================
-
-def predict_all(df_recent: pd.DataFrame,
-                df_featured: pd.DataFrame,
-                model_type: str = "lstm") -> dict:
-    """
-    Run LSTM predictions for all three targets.
-    FIXED: passes df_featured (not df_raw) to predict_with_lstm.
-    """
-    results = {}
     last_ts = pd.to_datetime(df_featured["timestamp"].iloc[-1])
-
-    for target in TARGET_COLS:
-        results[target] = predict_with_lstm(df_featured, target)  # FIX: df_featured
+    results = {target: predict_with_lstm(df_featured, target) for target in TARGET_COLS}
 
     return {
         "prediction_date": (last_ts + timedelta(days=1)).strftime("%Y-%m-%d"),
         **results,
     }
 
-
-def daily_forecast(df_recent: pd.DataFrame,
-                   df_featured: pd.DataFrame) -> dict:
-    """
-    Clean daily forecast for all targets — ready for API or DB.
-    """
-    raw   = predict_all(df_recent, df_featured, model_type="lstm")
+def daily_forecast(df_recent: pd.DataFrame, df_featured: pd.DataFrame) -> dict:
+    raw   = predict_all(df_recent, df_featured)
     clean = {"prediction_date": raw["prediction_date"]}
 
     for target in TARGET_COLS:

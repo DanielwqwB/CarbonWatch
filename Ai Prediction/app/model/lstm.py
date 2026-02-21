@@ -1,15 +1,5 @@
-"""
-LSTM Model Architecture
-========================
-Builds, saves, and loads the LSTM for climate forecasting.
-"""
-
 import logging
 import numpy as np
-from pathlib import Path
-
-import sys
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from app.pipeline.config import (
     LSTM_UNITS, DROPOUT_RATE, DENSE_UNITS,
     LEARNING_RATE, PREDICTION_HORIZON, PATIENCE, get_model_path
@@ -34,122 +24,85 @@ except ImportError:
     logger.warning("TensorFlow not installed.")
 
 
-def get_lstm_key(target: str) -> str:
-    if "co2" in target:
-        return "lstm_co2"
-    elif "temp" in target:
-        return "lstm_temperature"
-    elif "humid" in target:
-        return "lstm_humidity"
-    else:
-        raise ValueError(f"Unknown target: {target}")
+_KEY_MAP = {
+    "co2_ppm":          "lstm_co2",
+    "temperature_c":    "lstm_temperature",
+    "humidity_percent": "lstm_humidity",
+}
 
 
-def build_lstm_model(input_shape: tuple,
-                     target: str,
-                     lstm_units: list = None,
-                     dropout: float = None,
-                     dense_units: list = None,
-                     lr: float = None,
-                     bidirectional: bool = False):
-
+def build_lstm_model(n_features: int, seq_len: int = 168):
+    """Build and compile a Bidirectional LSTM model."""
     if not TF_AVAILABLE:
-        raise ImportError("TensorFlow required.")
+        raise RuntimeError("TensorFlow is not installed.")
 
-    lstm_units  = lstm_units  or LSTM_UNITS
-    dropout     = dropout     or DROPOUT_RATE
-    dense_units = dense_units or DENSE_UNITS
-    lr          = lr          or LEARNING_RATE
+    model = Sequential([
+        Input(shape=(seq_len, n_features)),
+        Bidirectional(LSTM(LSTM_UNITS[0], return_sequences=True)),
+        BatchNormalization(),
+        Dropout(DROPOUT_RATE),
+        Bidirectional(LSTM(LSTM_UNITS[1], return_sequences=False)),
+        BatchNormalization(),
+        Dropout(DROPOUT_RATE),
+        Dense(DENSE_UNITS[0], activation="relu"),
+        Dropout(DROPOUT_RATE),
+        Dense(PREDICTION_HORIZON),
+    ])
 
-    model = Sequential(name=f"LSTM_{target}")
-    model.add(Input(shape=input_shape))
-
-    for i, units in enumerate(lstm_units):
-        return_seq = (i < len(lstm_units) - 1)
-        layer = LSTM(units, return_sequences=return_seq, name=f"lstm_{i+1}")
-        if i == 0 and bidirectional:
-            model.add(Bidirectional(layer, name=f"bilstm_{i+1}"))
-        else:
-            model.add(layer)
-        model.add(BatchNormalization(name=f"bn_{i+1}"))
-        model.add(Dropout(dropout, name=f"drop_{i+1}"))
-
-    for i, units in enumerate(dense_units):
-        model.add(Dense(units, activation="relu", name=f"dense_{i+1}"))
-        model.add(Dropout(dropout / 2, name=f"drop_dense_{i+1}"))
-
-    model.add(Dense(PREDICTION_HORIZON, activation="linear", name="output"))
-
-    # FIX: Removed CosineDecayRestarts schedule — using a plain float lr
-    # so that ReduceLROnPlateau in get_callbacks() can adjust it freely.
     model.compile(
-        optimizer=Adam(learning_rate=lr),
+        optimizer=Adam(learning_rate=LEARNING_RATE),
         loss="huber",
-        metrics=["mae", "mse"]
+        metrics=["mae"],
     )
-
-    logger.info(
-        f"LSTM built for '{target}'. "
-        f"Input: {input_shape}, Output: {PREDICTION_HORIZON}h, "
-        f"Bidirectional: {bidirectional}"
-    )
-    model.summary(print_fn=logger.info)
+    logger.info(f"Built LSTM model: input=({seq_len}, {n_features}), output={PREDICTION_HORIZON}")
     return model
 
 
-def get_callbacks(target: str, log_dir: str = None) -> list:
+def load_lstm(target: str):
+    """Load a saved LSTM model for the given target column."""
     if not TF_AVAILABLE:
-        return []
+        raise RuntimeError("TensorFlow is not installed.")
+    if target not in _KEY_MAP:
+        raise ValueError(f"Unknown target: '{target}'. Valid: {list(_KEY_MAP.keys())}")
+    path = get_model_path(_KEY_MAP[target])
+    logger.info(f"Loading LSTM model for '{target}' from {path}")
+    return load_model(str(path))
 
-    ckpt_path = get_model_path(get_lstm_key(target))
-    logger.info(f"  ModelCheckpoint: {ckpt_path}")
 
-    callbacks = [
+def save_lstm(model, target: str):
+    """Save an LSTM model for the given target column."""
+    if target not in _KEY_MAP:
+        raise ValueError(f"Unknown target: '{target}'. Valid: {list(_KEY_MAP.keys())}")
+    path = get_model_path(_KEY_MAP[target])
+    model.save(str(path))
+    logger.info(f"Saved LSTM model for '{target}' to {path}")
+
+
+def get_callbacks(target: str) -> list:
+    """Return standard training callbacks for the given target."""
+    if not TF_AVAILABLE:
+        raise RuntimeError("TensorFlow is not installed.")
+    if target not in _KEY_MAP:
+        raise ValueError(f"Unknown target: '{target}'. Valid: {list(_KEY_MAP.keys())}")
+    checkpoint_path = get_model_path(_KEY_MAP[target])
+    return [
         EarlyStopping(
             monitor="val_loss",
             patience=PATIENCE,
             restore_best_weights=True,
-            verbose=1
+            verbose=1,
         ),
         ModelCheckpoint(
-            filepath=str(ckpt_path),
+            filepath=str(checkpoint_path),
             monitor="val_loss",
             save_best_only=True,
-            verbose=1
+            verbose=1,
         ),
-        # FIX: This now works correctly because the optimizer uses a plain
-        # float lr instead of a LearningRateSchedule object.
         ReduceLROnPlateau(
             monitor="val_loss",
             factor=0.5,
-            patience=7,
+            patience=max(5, PATIENCE // 3),
             min_lr=1e-6,
-            verbose=1
+            verbose=1,
         ),
     ]
-    if log_dir:
-        callbacks.append(TensorBoard(log_dir=log_dir, histogram_freq=1))
-    return callbacks
-
-
-def save_lstm(model, target: str):
-    if not TF_AVAILABLE:
-        return
-    path = get_model_path(get_lstm_key(target))
-    model.save(path)
-    logger.info(f"LSTM saved: {path}")
-
-
-def load_lstm(target: str):
-    if not TF_AVAILABLE:
-        raise ImportError("TensorFlow required.")
-    path = get_model_path(get_lstm_key(target))
-    model = load_model(path)
-    logger.info(f"LSTM loaded: {path}")
-    return model
-
-
-def predict_lstm(model, X_seq: np.ndarray, scaler_y) -> np.ndarray:
-    y_scaled = model.predict(X_seq, verbose=0)
-    n, h     = y_scaled.shape
-    return scaler_y.inverse_transform(y_scaled.reshape(-1, 1)).reshape(n, h)
