@@ -1,6 +1,6 @@
 # CarbonWatch
 
-A full-stack air quality monitoring system for tracking, analyzing, and predicting CO2 emissions across establishments and barangay sensor nodes in Naga City. The system spans four components in this repository: an IoT sensor device, a Node.js backend API, a Python AI prediction service, and a React Native mobile application.
+A full-stack air quality monitoring system for tracking, analyzing, and predicting CO2 Density across establishments and barangay sensor nodes in Naga City. The system spans four components in this repository: an IoT sensor device, a Node.js backend API, a Python AI prediction service, and a React Native mobile application.
 
 ---
 
