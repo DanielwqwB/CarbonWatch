@@ -184,7 +184,7 @@ export default function Dashboard() {
       if (bRank !== aRank) return bRank - aRank;
       return (parseFloat(b.co2_density) || 0) - (parseFloat(a.co2_density) || 0);
     })
-    .slice(0, 5);
+    .slice(0, 27);
 
   const maxCO2 = topBarangays.length
     ? Math.max(...topBarangays.map(s => parseFloat(s.co2_density) || 0))

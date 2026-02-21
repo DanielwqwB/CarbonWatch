@@ -82,13 +82,29 @@ const mergeDayData = (entries) => {
 };
 
 // Group flat prediction array into { "2026-02-20": { co2, temp, humidity } }
+// Group predictions array into { "2026-02-22": { co2, temp, hum, runAt, model } }
 const groupByDate = (predictions) => {
   const map = {};
   predictions.forEach((p) => {
-    if (!map[p.prediction_date]) map[p.prediction_date] = { runAt: p.run_at, model: p.model_used };
-    if (p.target === 'co2_density')   map[p.prediction_date].co2  = p;
-    if (p.target === 'temperature_c') map[p.prediction_date].temp = p;
-    if (p.target === 'humidity')      map[p.prediction_date].hum  = p;
+    map[p.prediction_date] = {
+      runAt:  p.run_at,
+      model:  p.model_used,
+      co2: {
+        mean: p.co2?.mean   ?? null,
+        min:  p.co2?.min    ?? null,
+        max:  p.co2?.max    ?? null,
+      },
+      temp: {
+        mean: p.temperature?.mean ?? null,
+        min:  p.temperature?.min  ?? null,
+        max:  p.temperature?.max  ?? null,
+      },
+      hum: {
+        mean: p.humidity?.mean ?? null,
+        min:  p.humidity?.min  ?? null,
+        max:  p.humidity?.max  ?? null,
+      },
+    };
   });
   return map;
 };
