@@ -595,6 +595,7 @@ export default function PredictionScreen() {
           </View>
         )}
 
+        
         {/* Refresh footer */}
         <TouchableOpacity style={styles.refreshFooter} onPress={fetchAll}>
           <Feather name="refresh-cw" size={14} color="#9CA3AF" style={{ marginRight: 6 }} />
