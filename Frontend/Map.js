@@ -19,7 +19,7 @@ const LOGO_IMG = require('./assets/image.png');
 
 const SENSOR_API      = 'https://bytetech-final1.onrender.com/sensor';
 const SENSOR_DATA_API = 'https://bytetech-final1.onrender.com/sensor-data';
-const FEEDBACK_API    = 'https://bytetech-final1.onrender.com/create/feedback'; // ← swap route if needed
+const FEEDBACK_API    = 'https://bytetech-final1.onrender.com/create/feedback';
 
 const NAGA_CITY_CENTER = {
   latitude: 13.6218,
@@ -240,15 +240,7 @@ const FeedbackModal = ({ visible, onClose, currentTab }) => {
   );
 };
 
-// ─── Shrinking Feedback FAB ───────────────────────────────────────────────────
-//
-//  Timeline per session:
-//    0s   → mounts EXPANDED (icon + "Feedback" label)
-//    60s  → smoothly shrinks to icon-only circle
-//    tap  → if shrunk: expand + reset 60s timer
-//           if expanded: open feedback modal + reset 60s timer
-//
-const SHRINK_AFTER_MS = 10_000; // 1 minute
+const SHRINK_AFTER_MS = 10_000;
 
 const FeedbackButton = ({ onPress, bottomOffset = 100 }) => {
   const [expanded, setExpanded] = useState(true);
