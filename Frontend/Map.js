@@ -221,7 +221,8 @@ const MapScreen = () => {
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
       <View style={{ flex: 1 }}>
-        {currentTab === 'Map'        ? renderMapContent()   :
+        {
+         currentTab === 'Map'        ? renderMapContent()   :
          currentTab === 'Dashboard'  ? <DashboardScreen />  :
          currentTab === 'Reports'    ? <ReportsScreen />    :
          currentTab === 'Prediction' ? <PredictionScreen /> :
@@ -317,11 +318,11 @@ const MapScreen = () => {
       {/* ── Bottom Tab Bar ──────────────────────────────────────────────── */}
       <View style={styles.bottomTabBar}>
         {[
-          { name: 'Map',        icon: 'Map'             },
           { name: 'Dashboard',  icon: 'LayoutDashboard' },
+          { name: 'Map',        icon: 'Map'             },
           { name: 'Reports',    icon: 'ClipboardList'   },
-          { name: 'Prediction', icon: 'TrendingUp'      },
           { name: 'Places',     icon: 'MapPin'          },
+          { name: 'Prediction', icon: 'TrendingUp'      },
         ].map(tab => (
           <TouchableOpacity
             key={tab.name}
