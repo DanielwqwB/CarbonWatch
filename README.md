@@ -280,11 +280,11 @@ Ensure `expo-print` and `expo-sharing` are installed. On Android, confirm storag
 
 ## Authors
 
-•	**John Roy V. Galvez ** is the Team Leader, robotics-focused engineer, educator, and international AI challenge champion and researcher.
+•	**John Roy V. Galvez** is the Team Leader, robotics-focused engineer, educator, and international AI challenge champion and researcher.
   - LinkedIn: https://www.linkedin.com/in/johnroy-galvez/?skipRedirect=true
   - Facebook: https://www.facebook.com/jroy.17
 
-•	**John Paul Cambiado ** is a Backend Developer, 3rd-year BS Computer Science student at Naga College Foundation Inc., and active student leader.
+•	**John Paul Cambiado** is a Backend Developer, 3rd-year BS Computer Science student at Naga College Foundation Inc., and active student leader.
   - LinkedIn: https://www.linkedin.com/in/john-paul-cambiado-68284b324/
   - Facebook: https://www.facebook.com/johnpaul.cambiado.1
 
