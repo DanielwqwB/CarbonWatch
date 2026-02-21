@@ -595,40 +595,6 @@ export default function PredictionScreen() {
           </View>
         )}
 
-        {/* ── Date history list ── */}
-        {availDates.length > 1 && (
-          <View style={styles.historyCard}>
-            <Text style={styles.historyTitle}>📅 All Reports</Text>
-            {availDates.map((date) => {
-              const entries = selectedNodes
-                .map(id => nodeHistoryMaps[id]?.[date])
-                .filter(Boolean);
-              const merged = mergeDayData(entries);
-              const sel = date === selectedDate;
-              return (
-                <TouchableOpacity
-                  key={date}
-                  style={[styles.historyRow, sel && styles.historyRowActive]}
-                  onPress={() => setSelectedDate(date)}
-                >
-                  <View style={styles.historyRowLeft}>
-                    <View style={[styles.historyDot, { backgroundColor: statusColor(deriveStatus(merged?.co2?.mean)) }]} />
-                    <View>
-                      <Text style={[styles.historyDate, sel && styles.historyDateActive]}>
-                        {fmtDate(date)}
-                      </Text>
-                      <Text style={styles.historyMeta}>
-                        CO₂ {fmt(merged?.co2?.mean, 0)} ppm · {fmt(merged?.temp?.mean)} °C · {fmt(merged?.hum?.mean, 0)}%
-                      </Text>
-                    </View>
-                  </View>
-                  {sel && <Feather name="check-circle" size={16} color="#FF5C4D" />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
         {/* Refresh footer */}
         <TouchableOpacity style={styles.refreshFooter} onPress={fetchAll}>
           <Feather name="refresh-cw" size={14} color="#9CA3AF" style={{ marginRight: 6 }} />

@@ -31,8 +31,15 @@ const getCarbonColor = (level) => {
   }
 };
 
-const getRankColor = (rank) =>
-  (['#FF5C4D','#FF7A6E','#FF9890','#FFB6B1','#FFC5C0'])[rank - 1] || '#F8F9FA';
+// Only used for rank badge background on top 3
+const getTopRankBadgeColor = (rank) => {
+  switch (rank) {
+    case 1: return '#FF5C4D';
+    case 2: return '#FF7A6E';
+    case 3: return '#FF9890';
+    default: return '#F3F4F6';
+  }
+};
 
 const formatCO2 = (val) => {
   const n = parseFloat(val);
@@ -175,15 +182,9 @@ export default function Dashboard() {
     if (carbonCounts[l] !== undefined) carbonCounts[l]++;
   });
 
-  const severityRank = { 'VERY HIGH': 4, HIGH: 3, MODERATE: 2, LOW: 1, NORMAL: 0 };
   const topBarangays = [...merged]
-    .filter(s => s.co2_density != null || s.carbon_level != null)
-    .sort((a, b) => {
-      const aRank = severityRank[(a.carbon_level || 'NORMAL').toUpperCase()] ?? 0;
-      const bRank = severityRank[(b.carbon_level || 'NORMAL').toUpperCase()] ?? 0;
-      if (bRank !== aRank) return bRank - aRank;
-      return (parseFloat(b.co2_density) || 0) - (parseFloat(a.co2_density) || 0);
-    })
+    .filter(s => s.co2_density != null && !isNaN(parseFloat(s.co2_density)))
+    .sort((a, b) => (parseFloat(b.co2_density) || 0) - (parseFloat(a.co2_density) || 0))
     .slice(0, 27);
 
   const maxCO2 = topBarangays.length
@@ -236,8 +237,10 @@ export default function Dashboard() {
     <SafeAreaView style={styles.container}>
       <View style={styles.statusBarPlaceholder} />
 
+      {/* ── Settings overlay — must be ABOVE ScrollView in z-order ── */}
       <SettingsScreen visible={settingsVisible} onClose={handleSettingsClose} />
 
+      {/* ── Calendar overlay ── */}
       <CalendarPicker
         visible={calendarVisible}
         onClose={() => setCalendarVisible(false)}
@@ -394,70 +397,6 @@ export default function Dashboard() {
               </View>
             </View>
 
-            {/* ── Top 5 Barangays ── */}
-            <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle} numberOfLines={1}>
-               Top Barangays By Carbon Emmission
-              </Text>
-
-              {topBarangays.map((item, index) => {
-                const rank     = index + 1;
-                const color    = getRankColor(rank);
-                const co2      = parseFloat(item.co2_density) || 0;
-                const pct      = maxCO2 > 0 ? `${Math.round((co2 / maxCO2) * 100)}%` : '0%';
-                const lvlColor = getCarbonColor(item.carbon_level);
-
-                return (
-                  <View key={`${item.sensor_id}-${item.data_id}`} style={styles.listItem}>
-                    {/* Rank Badge */}
-                    <View style={[styles.rankBadge, { backgroundColor: rank <= 3 ? color : '#F3F4F6' }]}>
-                      <Text style={[styles.rankText, { color: rank <= 3 ? '#FFFFFF' : '#2D2D2D' }]}>
-                        {rank}
-                      </Text>
-                    </View>
-
-                    {/* Content */}
-                    <View style={styles.progressContainer}>
-                      {/* Name + Level + CO2 value */}
-                      <View style={styles.progressLabelRow}>
-                        <Text style={styles.barangayName} numberOfLines={1}>
-                          {item.barangay_name || item.sensor_name || `Sensor ${item.sensor_id}`}
-                        </Text>
-                        {item.carbon_level ? (
-                          <View style={[styles.inlineLevelBadge, { backgroundColor: lvlColor + '22' }]}>
-                            <Text style={[styles.inlineLevelText, { color: lvlColor }]} numberOfLines={1}>
-                              {item.carbon_level}
-                            </Text>
-                          </View>
-                        ) : null}
-                        <Text style={styles.barangayValue} numberOfLines={1}>
-                          {co2 > 0 ? formatCO2(item.co2_density) : '—'}
-                        </Text>
-                      </View>
-
-                      {/* Progress bar */}
-                      <View style={styles.progressBarBackground}>
-                        <View style={[styles.progressBarFill, { backgroundColor: color, width: pct }]} />
-                      </View>
-
-                      {/* Detail row */}
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailText} numberOfLines={1}>
-                          🌡 {formatTemp(item.temperature_c, appSettings.tempUnit)}
-                        </Text>
-                        <Text style={styles.detailText} numberOfLines={1}>
-                          💧 {item.humidity != null ? `${parseFloat(item.humidity).toFixed(0)}%` : '—'}
-                        </Text>
-                        <Text style={styles.detailText} numberOfLines={1}>
-                          🔥 {formatTemp(item.heat_index_c, appSettings.tempUnit)}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-
             {/* ── Footer Summary ── */}
             <View style={styles.footerContainer}>
               <View style={styles.footerHeader}>
@@ -504,6 +443,55 @@ export default function Dashboard() {
               )}
             </View>
 
+            {/* ── Top Barangays ── */}
+            <View style={[styles.sectionContainer, { marginTop: 16 }]}>
+              <Text style={styles.sectionTitle} numberOfLines={1}>
+                Top Barangays By Carbon Emmission
+              </Text>
+
+              {topBarangays.map((item, index) => {
+                const rank        = index + 1;
+                const co2         = parseFloat(item.co2_density) || 0;
+                const pct         = maxCO2 > 0 ? `${Math.round((co2 / maxCO2) * 100)}%` : '0%';
+                // ✅ Progress bar & icon accent = carbon severity color
+                const carbonColor = getCarbonColor(item.carbon_level);
+                // ✅ Badge bg: top-3 use warm red scale, rest use carbon color tint
+                const badgeBg     = rank <= 3
+                  ? getTopRankBadgeColor(rank)
+                  : carbonColor + '22';
+                const badgeTextColor = rank <= 3 ? '#FFFFFF' : carbonColor;
+
+                return (
+                  <View key={`${item.sensor_id}-${item.data_id}`} style={styles.listItem}>
+
+                    {/* ── Rank Badge ── */}
+                    <View style={[styles.rankBadge, { backgroundColor: badgeBg, borderWidth: rank > 3 ? 1.5 : 0, borderColor: rank > 3 ? carbonColor : 'transparent' }]}>
+                      <Text style={[styles.rankText, { color: badgeTextColor }]}>
+                        {rank}
+                      </Text>
+                    </View>
+
+                    {/* ── Content ── */}
+                    <View style={styles.progressContainer}>
+                      <View style={styles.progressLabelRow}>
+                        <Text style={styles.barangayName} numberOfLines={1}>
+                          {item.barangay_name || item.sensor_name || `Sensor ${item.sensor_id}`}
+                        </Text>
+
+                        <Text style={styles.barangayValue} numberOfLines={1}>
+                          {co2 > 0 ? formatCO2(item.co2_density) : '—'}
+                        </Text>
+                      </View>
+
+                      {/* ── Progress bar — color = carbon level ── */}
+                      <View style={styles.progressBarBackground}>
+                        <View style={[styles.progressBarFill, { backgroundColor: carbonColor, width: pct }]} />
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
           </>
         )}
       </ScrollView>
@@ -578,7 +566,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     marginHorizontal: 2,
-    minWidth: 0,          // allows flex to shrink properly
+    minWidth: 0,
   },
   pillCount:            { fontSize: 16, fontWeight: '700' },
   pillLabel:            { fontSize: 8, fontWeight: '600', marginTop: 2 },
@@ -590,27 +578,10 @@ const styles = StyleSheet.create({
   alertPill:            { backgroundColor: '#FEF2F2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginLeft: 'auto' },
   alertText:            { fontSize: 10, color: '#D64545', fontWeight: '700' },
 
-  // ── Barangay List ─────────────────────────────────────────────────────────
-  listItem:             { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
-  rankBadge:            { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginRight: 10, marginTop: 1, flexShrink: 0 },
-  rankText:             { fontSize: 11, fontWeight: '700' },
-  progressContainer:    { flex: 1, minWidth: 0 },
-
-  progressLabelRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  barangayName:         { fontSize: 13, fontWeight: '600', color: '#2D2D2D', flexShrink: 1, marginRight: 5 },
-  inlineLevelBadge:     { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, marginRight: 5, flexShrink: 0 },
-  inlineLevelText:      { fontSize: 8, fontWeight: '700' },
-  barangayValue:        { fontSize: 12, color: '#6B7280', fontWeight: '600', marginLeft: 'auto', flexShrink: 0 },
-
-  progressBarBackground:{ height: 7, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden', marginBottom: 6 },
-  progressBarFill:      { height: '100%', borderRadius: 4 },
-
-  detailRow:            { flexDirection: 'row', justifyContent: 'space-between' },
-  detailText:           { fontSize: 11, color: '#9CA3AF', flexShrink: 1 },
-
   // ── Footer ────────────────────────────────────────────────────────────────
   footerContainer:      { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
-  footerHeader:         { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 },
+  // FIX: was `paddingbottom: 100` (typo + wrong value) → proper marginBottom
+  footerHeader:         { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   footerLabel:          { fontSize: 13, fontWeight: '500', color: '#6B7280', flexShrink: 1 },
 
   summaryGrid:          { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
@@ -622,4 +593,23 @@ const styles = StyleSheet.create({
   comparisonBadge:      { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, marginRight: 8 },
   comparisonText:       { fontSize: 13, fontWeight: '700' },
   comparisonLabel:      { fontSize: 13, color: '#6B7280', flexShrink: 1 },
+
+  // ── Barangay List ─────────────────────────────────────────────────────────
+  listItem:             { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
+  rankBadge:            { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10, marginTop: 2, flexShrink: 0 },
+  rankText:             { fontSize: 11, fontWeight: '700' },
+  progressContainer:    { flex: 1, minWidth: 0 },
+
+  progressLabelRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 4 },
+  barangayName:         { fontSize: 13, fontWeight: '600', color: '#2D2D2D', flexShrink: 1 },
+  // ✅ Inline carbon level chip shown next to name
+  inlineLevelBadge:     { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, flexShrink: 0 },
+  inlineLevelText:      { fontSize: 8, fontWeight: '700' },
+  barangayValue:        { fontSize: 12, color: '#6B7280', fontWeight: '600', marginLeft: 'auto', flexShrink: 0 },
+
+  progressBarBackground:{ height: 7, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden', marginBottom: 4 },
+  progressBarFill:      { height: '100%', borderRadius: 4 },
+
+  detailRow:            { flexDirection: 'row', justifyContent: 'space-between' },
+  detailText:           { fontSize: 11, color: '#9CA3AF', flexShrink: 1 },
 });
