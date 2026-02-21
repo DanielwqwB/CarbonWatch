@@ -1,6 +1,6 @@
 # CarbonWatch
 
-A full-stack air quality monitoring system for tracking, analyzing, and predicting CO2 Density across establishments and barangay sensor nodes in Naga City. The system spans four components in this repository: an IoT sensor device, a Node.js backend API, a Python AI prediction service, and a React Native mobile application.
+A full-stack air quality monitoring system for tracking, analyzing, and predicting CO2 emissions across establishments and barangay sensor nodes in Naga City. The system spans four components in this repository: an IoT sensor device, a Node.js backend API, a Python AI prediction service, and a React Native mobile application.
 
 ---
 
@@ -125,6 +125,14 @@ Displays per-node prediction history fetched from the AI service. A node selecto
 ### Establishments
 
 A directory of registered establishments with filter tabs by severity level (All / Low / Moderate / High / Very High). Each card shows the establishment type (inferred from name keywords), current CO2 badge, temperature, and percentage change from the previous reading, with a button to open the location in the native maps app. The Safe Hours sub-view shows a per-hour CO2 timeline for the current day, highlighting Low-emission windows as recommended visiting times. Qualifying establishments display a Clean Air Certified badge. The header shows a time-of-day contextual tip and an animated live-data pulse indicator. Data auto-refreshes every 30 seconds.
+
+---
+
+## Demo
+
+
+https://github.com/user-attachments/assets/41f805df-f9e5-4ba1-8ec6-e56ba0b164dc
+
 
 ---
 
