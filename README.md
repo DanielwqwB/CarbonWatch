@@ -280,23 +280,23 @@ Ensure `expo-print` and `expo-sharing` are installed. On Android, confirm storag
 
 ## Authors
 
-•	John Roy V. Galvez is the Team Leader, robotics-focused engineer, educator, and international AI challenge champion and researcher.
+•	**John Roy V. Galvez ** is the Team Leader, robotics-focused engineer, educator, and international AI challenge champion and researcher.
   - LinkedIn: https://www.linkedin.com/in/johnroy-galvez/?skipRedirect=true
   - Facebook: https://www.facebook.com/jroy.17
 
-•	John Paul Cambiado is a Backend Developer, 3rd-year BS Computer Science student at Naga College Foundation Inc., and active student leader.
+•	**John Paul Cambiado ** is a Backend Developer, 3rd-year BS Computer Science student at Naga College Foundation Inc., and active student leader.
   - LinkedIn: https://www.linkedin.com/in/john-paul-cambiado-68284b324/
   - Facebook: https://www.facebook.com/johnpaul.cambiado.1
 
-•	Daniel Bonito is a Frontend Developer, 3rd-year BS Computer Science student, and President of Panthera Tigris Game Developers Association.
+•   **Daniel Bonito** is a Frontend Developer, 3rd-year BS Computer Science student, and President of Panthera Tigris Game Developers Association.
   - LinkedIn: www.linkedin.com/in/daniel-bonito-71695531b
   - Facebook: https://www.facebook.com/me.xxBASE24MANxx
 
-•	Lawrence Nodado is a 3rd-year BS Computer Science student specializing in AI integration.
+•	**Lawrence Nodado** is a 3rd-year BS Computer Science student specializing in AI integration.
   - LinkedIn: https://www.linkedin.com/in/rey-lawrence-nodado-1604743b2
   - Facebook: https://www.facebook.com/lawrence.nodado.2024
 
-•	Joshua Rovic Sanota is a 3rd-year BS Computer Science student specializing in IoT and hardware integration, and Auditor of Panthera Tigris Game Developers Association.
+•	**Joshua Rovic Sanota** is a 3rd-year BS Computer Science student specializing in IoT and hardware integration, and Auditor of Panthera Tigris Game Developers Association.
   - LinkedIn: https://ph.linkedin.com/in/joshua-rovic-sanota-7426063b2
   - Facebook: https://www.facebook.com/juswaaa25
 ---
