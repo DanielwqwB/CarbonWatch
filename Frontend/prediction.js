@@ -12,6 +12,43 @@ const historyUrl = (nodeId) =>
 
 const INSIGHTS_URL = 'https://ai-prediction-jwnp.onrender.com/api/insights/latest';
 
+// 🔑 Replace with your actual OpenAI API key
+const OPENAI_API_KEY = 'OPENAI KEY HERE';
+// ─── Bicol Translator ─────────────────────────────────────────────────────────
+const translateToBicol = async (text) => {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a translator specializing in Bikol (Bicol) language from the Bicol Region of the Philippines. ' +
+            'Translate the given English text accurately into natural Bikol. ' +
+            'Preserve technical terms like CO₂, ppm, °C, and proper nouns as-is. ' +
+            'Return only the translated text with no explanations.',
+        },
+        { role: 'user', content: text },
+      ],
+      temperature: 0.3,
+      max_tokens: 1000,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err?.error?.message ?? 'Translation failed');
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content.trim();
+};
+
 // ─── Nodes ────────────────────────────────────────────────────────────────────
 const NODES = [
   { id: '1', label: 'Abella', icon: 'radio' },
@@ -48,61 +85,33 @@ const deriveStatus = (co2) => {
 const statusColor = (s) =>
   ({ green: '#10B981', yellow: '#FBBF24', orange: '#F59E0B', red: '#FF5C4D', gray: '#9CA3AF' }[s?.color] ?? '#9CA3AF');
 
-// Average numeric values, ignoring nulls
 const avgOf = (arr) => {
   const valid = arr.filter(v => v != null);
   if (!valid.length) return null;
   return valid.reduce((a, b) => a + b, 0) / valid.length;
 };
 
-// Merge multiple node day-data objects into one combined entry
 const mergeDayData = (entries) => {
   if (!entries.length) return null;
   const first = entries[0];
   return {
     runAt: first.runAt,
     model: first.model,
-    co2: {
-      mean: avgOf(entries.map(e => e.co2?.mean)),
-      min:  avgOf(entries.map(e => e.co2?.min)),
-      max:  avgOf(entries.map(e => e.co2?.max)),
-    },
-    temp: {
-      mean: avgOf(entries.map(e => e.temp?.mean)),
-      min:  avgOf(entries.map(e => e.temp?.min)),
-      max:  avgOf(entries.map(e => e.temp?.max)),
-    },
-    hum: {
-      mean: avgOf(entries.map(e => e.hum?.mean)),
-      min:  avgOf(entries.map(e => e.hum?.min)),
-      max:  avgOf(entries.map(e => e.hum?.max)),
-    },
+    co2:  { mean: avgOf(entries.map(e => e.co2?.mean)),  min: avgOf(entries.map(e => e.co2?.min)),  max: avgOf(entries.map(e => e.co2?.max))  },
+    temp: { mean: avgOf(entries.map(e => e.temp?.mean)), min: avgOf(entries.map(e => e.temp?.min)), max: avgOf(entries.map(e => e.temp?.max)) },
+    hum:  { mean: avgOf(entries.map(e => e.hum?.mean)),  min: avgOf(entries.map(e => e.hum?.min)),  max: avgOf(entries.map(e => e.hum?.max))  },
   };
 };
 
-// Group flat prediction array into { "2026-02-20": { co2, temp, humidity } }
-// Group predictions array into { "2026-02-22": { co2, temp, hum, runAt, model } }
 const groupByDate = (predictions) => {
   const map = {};
   predictions.forEach((p) => {
     map[p.prediction_date] = {
-      runAt:  p.run_at,
-      model:  p.model_used,
-      co2: {
-        mean: p.co2?.mean   ?? null,
-        min:  p.co2?.min    ?? null,
-        max:  p.co2?.max    ?? null,
-      },
-      temp: {
-        mean: p.temperature?.mean ?? null,
-        min:  p.temperature?.min  ?? null,
-        max:  p.temperature?.max  ?? null,
-      },
-      hum: {
-        mean: p.humidity?.mean ?? null,
-        min:  p.humidity?.min  ?? null,
-        max:  p.humidity?.max  ?? null,
-      },
+      runAt: p.run_at,
+      model: p.model_used,
+      co2:  { mean: p.co2?.mean ?? null,         min: p.co2?.min ?? null,         max: p.co2?.max ?? null         },
+      temp: { mean: p.temperature?.mean ?? null, min: p.temperature?.min ?? null, max: p.temperature?.max ?? null },
+      hum:  { mean: p.humidity?.mean ?? null,    min: p.humidity?.min ?? null,    max: p.humidity?.max ?? null    },
     };
   });
   return map;
@@ -146,10 +155,9 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
     else setViewMonth(m => m + 1);
   };
 
-  const firstDay   = new Date(viewYear, viewMonth, 1).getDay();
+  const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const cells = [];
-
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
@@ -163,7 +171,6 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
               <Feather name="x" size={20} color="#374151" />
             </TouchableOpacity>
           </View>
-
           <View style={cal.monthNav}>
             <TouchableOpacity onPress={prevMonth} style={cal.navBtn}>
               <Feather name="chevron-left" size={20} color="#374151" />
@@ -173,33 +180,27 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
               <Feather name="chevron-right" size={20} color="#374151" />
             </TouchableOpacity>
           </View>
-
           <View style={cal.dayLabelsRow}>
             {DAYS.map(d => <Text key={d} style={cal.dayLabel}>{d}</Text>)}
           </View>
-
           <View style={cal.grid}>
             {cells.map((day, i) => {
               if (!day) return <View key={`blank-${i}`} style={cal.cell} />;
-              const ymd      = `${viewYear}-${String(viewMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-              const hasData  = availableDates.includes(ymd);
+              const ymd        = `${viewYear}-${String(viewMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+              const hasData    = availableDates.includes(ymd);
               const isSelected = ymd === selectedDate;
-              const isToday  = ymd === toYMD(today);
+              const isToday    = ymd === toYMD(today);
               return (
                 <TouchableOpacity
                   key={ymd}
-                  style={[
-                    cal.cell,
-                    isSelected && cal.cellSelected,
-                    isToday && !isSelected && cal.cellToday,
-                  ]}
+                  style={[cal.cell, isSelected && cal.cellSelected, isToday && !isSelected && cal.cellToday]}
                   onPress={() => hasData && onSelectDate(ymd)}
                   disabled={!hasData}
                 >
                   <Text style={[
                     cal.cellText,
-                    !hasData && cal.cellTextDisabled,
-                    isSelected && cal.cellTextSelected,
+                    !hasData           && cal.cellTextDisabled,
+                    isSelected         && cal.cellTextSelected,
                     isToday && !isSelected && cal.cellTextToday,
                   ]}>
                     {day}
@@ -209,7 +210,6 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
               );
             })}
           </View>
-
           <View style={cal.legend}>
             <View style={cal.legendItem}>
               <View style={[cal.legendDot, { backgroundColor: '#FF5C4D' }]} />
@@ -226,13 +226,110 @@ const CalendarModal = ({ visible, onClose, availableDates, selectedDate, onSelec
   );
 };
 
+// ─── Insight Card with Bicol Translator ───────────────────────────────────────
+const InsightCard = ({ insightData }) => {
+  const [lang,           setLang]           = useState('original'); // 'original' | 'bicol'
+  const [translatedText, setTranslatedText] = useState(null);
+  const [translating,    setTranslating]    = useState(false);
+  const [translateError, setTranslateError] = useState(null);
+
+  // Reset translation when insight text changes (e.g. auto-refresh)
+  useEffect(() => {
+    setLang('original');
+    setTranslatedText(null);
+    setTranslateError(null);
+  }, [insightData?.text]);
+
+  const handleTranslate = async () => {
+    // If already in Bicol → toggle back to original
+    if (lang === 'bicol') {
+      setLang('original');
+      return;
+    }
+    // Use cached translation if available
+    if (translatedText) {
+      setLang('bicol');
+      return;
+    }
+    // Fetch new translation
+    setTranslating(true);
+    setTranslateError(null);
+    try {
+      const result = await translateToBicol(insightData.text);
+      setTranslatedText(result);
+      setLang('bicol');
+    } catch (err) {
+      setTranslateError(err.message);
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const displayText = lang === 'bicol' && translatedText ? translatedText : insightData.text;
+  const isBicol     = lang === 'bicol';
+
+  return (
+    <View style={styles.insightCard}>
+      {/* ── Header ── */}
+      <View style={styles.insightHeader}>
+        <View style={styles.insightIconBox}>
+          <Text style={{ fontSize: 20 }}>🤖</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.insightTitle}>AI Insight — {insightData.barangay}</Text>
+          <Text style={styles.insightMeta}>
+            {fmtDate(insightData.date)}  ·  {fmtTime(insightData.runAt)}
+          </Text>
+        </View>
+
+        {/* ── Translate button ── */}
+        <TouchableOpacity
+          style={[styles.translateBtn, isBicol && styles.translateBtnActive]}
+          onPress={handleTranslate}
+          disabled={translating}
+          activeOpacity={0.75}
+        >
+          {translating ? (
+            <ActivityIndicator size="small" color="#FF5C4D" />
+          ) : (
+            <>
+              <Text style={styles.translateBtnFlag}>{isBicol ? '🇵🇭' : '🌐'}</Text>
+              <Text style={[styles.translateBtnText, isBicol && styles.translateBtnTextActive]}>
+                {isBicol ? 'Original' : 'Bicol'}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Language badge (shown when translated) ── */}
+      {isBicol && (
+        <View style={styles.langBadge}>
+          <Text style={styles.langBadgeText}>🇵🇭  Isinalin sa Bikol</Text>
+        </View>
+      )}
+
+      <View style={styles.insightDivider} />
+
+      {/* ── Insight text ── */}
+      <Text style={styles.insightBody}>{displayText}</Text>
+
+      {/* ── Translation error ── */}
+      {translateError && (
+        <View style={styles.translateErrorRow}>
+          <Feather name="alert-circle" size={13} color="#EF4444" style={{ marginRight: 5 }} />
+          <Text style={styles.translateErrorText}>Translation failed: {translateError}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function PredictionScreen() {
-  // Multi-select: array of node IDs. Default = first node selected.
   const [selectedNodes, setSelectedNodes] = useState(['1']);
-  const [calendarOpen, setCalendarOpen]   = useState(false);
+  const [calendarOpen,  setCalendarOpen]  = useState(false);
 
-  // Per-node history maps: { nodeId: { date: dayData } }
   const [nodeHistoryMaps, setNodeHistoryMaps] = useState({});
   const [availDates,      setAvailDates]      = useState([]);
   const [selectedDate,    setSelectedDate]    = useState(null);
@@ -241,11 +338,9 @@ export default function PredictionScreen() {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
 
-  // ── Toggle a node in/out of selection ──────────────────────────────────────
   const toggleNode = (nodeId) => {
     setSelectedNodes(prev => {
       if (prev.includes(nodeId)) {
-        // Prevent deselecting the last node
         if (prev.length === 1) return prev;
         return prev.filter(id => id !== nodeId);
       }
@@ -253,7 +348,6 @@ export default function PredictionScreen() {
     });
   };
 
-  // ── Fetch history for all selected nodes + latest insight ──────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -268,19 +362,12 @@ export default function PredictionScreen() {
         return r.json();
       });
 
-      const [nodeResults, insJson] = await Promise.all([
-        Promise.all(fetches),
-        insightFetch,
-      ]);
+      const [nodeResults, insJson] = await Promise.all([Promise.all(fetches), insightFetch]);
 
-      // Build per-node history maps
       const maps = {};
-      nodeResults.forEach(({ id, predictions }) => {
-        maps[id] = groupByDate(predictions);
-      });
+      nodeResults.forEach(({ id, predictions }) => { maps[id] = groupByDate(predictions); });
       setNodeHistoryMaps(maps);
 
-      // Union of all available dates across selected nodes
       const allDates = new Set();
       Object.values(maps).forEach(m => Object.keys(m).forEach(d => allDates.add(d)));
       const dates = Array.from(allDates).sort((a, b) => b.localeCompare(a));
@@ -315,18 +402,15 @@ export default function PredictionScreen() {
     return () => clearInterval(iv);
   }, [fetchAll]);
 
-  // ── Merge data for selected date across selected nodes ─────────────────────
   const dayData = (() => {
     if (!selectedDate) return null;
-    const entries = selectedNodes
-      .map(id => nodeHistoryMaps[id]?.[selectedDate])
-      .filter(Boolean);
+    const entries = selectedNodes.map(id => nodeHistoryMaps[id]?.[selectedDate]).filter(Boolean);
     return mergeDayData(entries);
   })();
 
-  const co2  = dayData?.co2?.mean ?? null;
-  const temp = dayData?.temp?.mean ?? null;
-  const hum  = dayData?.hum?.mean ?? null;
+  const co2    = dayData?.co2?.mean  ?? null;
+  const temp   = dayData?.temp?.mean ?? null;
+  const hum    = dayData?.hum?.mean  ?? null;
   const status = deriveStatus(co2);
 
   const baseTemp = temp ?? 25;
@@ -369,7 +453,6 @@ export default function PredictionScreen() {
     .map(n => n.label)
     .join(', ');
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -381,18 +464,15 @@ export default function PredictionScreen() {
     );
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>AI Prediction</Text>
-          <Text style={styles.headerSubtitle}>
-            {isLatest ? 'Latest Report' : 'Historical Report'}
-          </Text>
+          <Text style={styles.headerSubtitle}>{isLatest ? 'Latest Report' : 'Historical Report'}</Text>
         </View>
         <View style={styles.livePill}>
           <View style={[styles.liveDot, !isLatest && { backgroundColor: '#9CA3AF' }]} />
@@ -402,7 +482,7 @@ export default function PredictionScreen() {
         </View>
       </View>
 
-      {/* ── Node multi-select filter ── */}
+      {/* Node filter */}
       <View style={styles.filterWrapper}>
         <Text style={styles.filterLabel}>Select Nodes</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
@@ -415,9 +495,7 @@ export default function PredictionScreen() {
                 onPress={() => toggleNode(node.id)}
               >
                 <Feather name={node.icon} size={12} color={active ? '#FFF' : '#6B7280'} style={{ marginRight: 5 }} />
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                  {node.label}
-                </Text>
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{node.label}</Text>
                 {active && (
                   <View style={styles.checkBadge}>
                     <Feather name="check" size={9} color="#FF5C4D" />
@@ -432,35 +510,30 @@ export default function PredictionScreen() {
         )}
       </View>
 
-      {/* ── Date navigator ── */}
+      {/* Date navigator */}
       <View style={styles.dateNav}>
         <TouchableOpacity
           style={[styles.dateNavBtn, !canGoBack && styles.dateNavBtnDisabled]}
-          onPress={goBack}
-          disabled={!canGoBack}
+          onPress={goBack} disabled={!canGoBack}
         >
           <Feather name="chevron-left" size={20} color={canGoBack ? '#374151' : '#D1D5DB'} />
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.dateNavCenter} onPress={() => setCalendarOpen(true)}>
           <Feather name="calendar" size={14} color="#FF5C4D" style={{ marginRight: 7 }} />
           <Text style={styles.dateNavText}>{fmtDate(selectedDate)}</Text>
           <Feather name="chevron-down" size={14} color="#9CA3AF" style={{ marginLeft: 6 }} />
         </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.dateNavBtn, !canGoFwd && styles.dateNavBtnDisabled]}
-          onPress={goFwd}
-          disabled={!canGoFwd}
+          onPress={goFwd} disabled={!canGoFwd}
         >
           <Feather name="chevron-right" size={20} color={canGoFwd ? '#374151' : '#D1D5DB'} />
         </TouchableOpacity>
       </View>
 
-      {/* ── Scrollable body ── */}
+      {/* Scrollable body */}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
-        {/* Error */}
         {error && (
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>⚠️ {error}</Text>
@@ -470,7 +543,6 @@ export default function PredictionScreen() {
           </View>
         )}
 
-        {/* No data for selected date */}
         {!dayData && !error && (
           <View style={styles.emptyCard}>
             <Feather name="inbox" size={36} color="#D1D5DB" />
@@ -481,7 +553,6 @@ export default function PredictionScreen() {
 
         {dayData && (
           <>
-            {/* Node + run info pill */}
             <View style={styles.runInfoRow}>
               <Feather name="cpu" size={12} color="#9CA3AF" style={{ marginRight: 5 }} />
               <Text style={styles.runInfoText}>
@@ -489,7 +560,6 @@ export default function PredictionScreen() {
               </Text>
             </View>
 
-            {/* Per-node quick summary (when multiple selected) */}
             {selectedNodes.length > 1 && (
               <View style={styles.nodeBreakdownCard}>
                 <Text style={styles.nodeBreakdownTitle}>Per-Node Summary</Text>
@@ -520,43 +590,32 @@ export default function PredictionScreen() {
               </View>
             )}
 
-            {/* ── Metric cards ── */}
             <View style={styles.metricsRow}>
               <View style={[styles.metricCard, { borderTopColor: '#FF5C4D' }]}>
                 <Text style={styles.metricLabel}>CO₂</Text>
                 <Text style={[styles.metricValue, { color: '#FF5C4D' }]}>{fmt(co2)}</Text>
                 <Text style={styles.metricUnit}>ppm</Text>
-                <Text style={styles.metricRange}>
-                  {fmt(dayData.co2?.min)} – {fmt(dayData.co2?.max)}
-                </Text>
+                <Text style={styles.metricRange}>{fmt(dayData.co2?.min)} – {fmt(dayData.co2?.max)}</Text>
               </View>
-
               <View style={[styles.metricCard, { borderTopColor: '#F59E0B' }]}>
                 <Text style={styles.metricLabel}>Temp</Text>
                 <Text style={[styles.metricValue, { color: '#F59E0B' }]}>{fmt(temp)}</Text>
                 <Text style={styles.metricUnit}>°C</Text>
-                <Text style={styles.metricRange}>
-                  {fmt(dayData.temp?.min)} – {fmt(dayData.temp?.max)}
-                </Text>
+                <Text style={styles.metricRange}>{fmt(dayData.temp?.min)} – {fmt(dayData.temp?.max)}</Text>
               </View>
-
               <View style={[styles.metricCard, { borderTopColor: '#3B82F6' }]}>
                 <Text style={styles.metricLabel}>Humidity</Text>
                 <Text style={[styles.metricValue, { color: '#3B82F6' }]}>{fmt(hum)}</Text>
                 <Text style={styles.metricUnit}>%</Text>
-                <Text style={styles.metricRange}>
-                  {fmt(dayData.hum?.min)} – {fmt(dayData.hum?.max)}
-                </Text>
+                <Text style={styles.metricRange}>{fmt(dayData.hum?.min)} – {fmt(dayData.hum?.max)}</Text>
               </View>
             </View>
 
-            {/* ── Status badge ── */}
             <View style={[styles.statusBadge, { backgroundColor: statusColor(status) }]}>
               <Text style={styles.statusLabel}>{status.label}</Text>
               <Text style={styles.statusMessage}>{status.message}</Text>
             </View>
 
-            {/* ── Temperature chart ── */}
             <View style={styles.chartCard}>
               <View style={styles.chartHeader}>
                 <Text style={styles.chartTitle}>🌡 Temperature</Text>
@@ -565,7 +624,6 @@ export default function PredictionScreen() {
               <BarChart data={hourlyTemp} color="#FF9890" />
             </View>
 
-            {/* ── CO2 chart ── */}
             <View style={styles.chartCard}>
               <View style={styles.chartHeader}>
                 <Text style={styles.chartTitle}>💨 CO₂</Text>
@@ -576,27 +634,9 @@ export default function PredictionScreen() {
           </>
         )}
 
-        {/* ── AI Insight (always shows latest) ── */}
-        {insightData && (
-          <View style={styles.insightCard}>
-            <View style={styles.insightHeader}>
-              <View style={styles.insightIconBox}>
-                <Text style={{ fontSize: 20 }}>🤖</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.insightTitle}>AI Insight — {insightData.barangay}</Text>
-                <Text style={styles.insightMeta}>
-                  {fmtDate(insightData.date)}  ·  {fmtTime(insightData.runAt)}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.insightDivider} />
-            <Text style={styles.insightBody}>{insightData.text}</Text>
-          </View>
-        )}
+        {/* ── AI Insight with Bicol translator ── */}
+        {insightData && <InsightCard insightData={insightData} />}
 
-        
-        {/* Refresh footer */}
         <TouchableOpacity style={styles.refreshFooter} onPress={fetchAll}>
           <Feather name="refresh-cw" size={14} color="#9CA3AF" style={{ marginRight: 6 }} />
           <Text style={styles.refreshFooterText}>Tap to refresh · auto-updates every 30 s</Text>
@@ -604,16 +644,12 @@ export default function PredictionScreen() {
 
       </ScrollView>
 
-      {/* ── Calendar Modal ── */}
       <CalendarModal
         visible={calendarOpen}
         onClose={() => setCalendarOpen(false)}
         availableDates={availDates}
         selectedDate={selectedDate}
-        onSelectDate={(date) => {
-          setSelectedDate(date);
-          setCalendarOpen(false);
-        }}
+        onSelectDate={(date) => { setSelectedDate(date); setCalendarOpen(false); }}
       />
     </SafeAreaView>
   );
@@ -634,120 +670,62 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
   livePill: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 20, gap: 6,
+    backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, gap: 6,
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FF5C4D' },
   liveText: { fontSize: 11, fontWeight: '700', color: '#FF5C4D', letterSpacing: 0.8 },
 
-  filterWrapper: {
-    backgroundColor: '#FFFFFF', paddingBottom: 10,
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
-  },
-  filterLabel: {
-    fontSize: 11, fontWeight: '700', color: '#9CA3AF',
-    letterSpacing: 0.8, textTransform: 'uppercase',
-    paddingHorizontal: 16, paddingTop: 10, marginBottom: 6,
-  },
+  filterWrapper:        { backgroundColor: '#FFFFFF', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  filterLabel:          { fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 0.8, textTransform: 'uppercase', paddingHorizontal: 16, paddingTop: 10, marginBottom: 6 },
   filterScroll:         { paddingHorizontal: 16, flexDirection: 'row' },
-  filterChip: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, backgroundColor: '#F3F4F6',
-    borderWidth: 1.5, borderColor: '#E5E7EB', marginRight: 8,
-  },
+  filterChip:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F3F4F6', borderWidth: 1.5, borderColor: '#E5E7EB', marginRight: 8 },
   filterChipActive:     { backgroundColor: '#FF5C4D', borderColor: '#FF5C4D' },
   filterChipText:       { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   filterChipTextActive: { color: '#FFFFFF' },
-  checkBadge: {
-    marginLeft: 5, width: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center',
-  },
-  filterHint: {
-    fontSize: 11, color: '#9CA3AF', paddingHorizontal: 16,
-    marginTop: 6, fontStyle: 'italic',
-  },
+  checkBadge:           { marginLeft: 5, width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
+  filterHint:           { fontSize: 11, color: '#9CA3AF', paddingHorizontal: 16, marginTop: 6, fontStyle: 'italic' },
 
-  dateNav: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
-  },
+  dateNav:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   dateNavBtn:         { padding: 8, borderRadius: 10, backgroundColor: '#F9FAFB' },
   dateNavBtnDisabled: { opacity: 0.3 },
-  dateNavCenter: {
-    flexDirection: 'row', alignItems: 'center',
-    flex: 1, justifyContent: 'center',
-    paddingVertical: 6, paddingHorizontal: 12,
-    marginHorizontal: 8, borderRadius: 10,
-    backgroundColor: '#FEF2F2',
-  },
-  dateNavText: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  dateNavCenter:      { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center', paddingVertical: 6, paddingHorizontal: 12, marginHorizontal: 8, borderRadius: 10, backgroundColor: '#FEF2F2' },
+  dateNavText:        { fontSize: 15, fontWeight: '700', color: '#111827' },
 
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36 },
 
-  errorCard: {
-    backgroundColor: '#FEF3C7', padding: 14, borderRadius: 12, marginBottom: 14,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
+  errorCard:   { backgroundColor: '#FEF3C7', padding: 14, borderRadius: 12, marginBottom: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   errorText:   { flex: 1, fontSize: 13, color: '#92400E' },
   retryButton: { backgroundColor: '#FBBF24', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
   retryText:   { color: '#78350F', fontWeight: '700', fontSize: 13 },
 
-  emptyCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 40,
-    alignItems: 'center', marginBottom: 14,
-  },
+  emptyCard:  { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 40, alignItems: 'center', marginBottom: 14 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151', marginTop: 12, marginBottom: 4 },
   emptyText:  { fontSize: 13, color: '#9CA3AF', textAlign: 'center' },
 
-  runInfoRow: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: 12, paddingHorizontal: 2,
-  },
+  runInfoRow:  { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 2 },
   runInfoText: { fontSize: 12, color: '#9CA3AF', flexShrink: 1 },
 
-  // Per-node breakdown (multi-select)
-  nodeBreakdownCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
-    marginBottom: 14, borderLeftWidth: 3, borderLeftColor: '#E5E7EB',
-  },
-  nodeBreakdownTitle: { fontSize: 12, fontWeight: '700', color: '#9CA3AF', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.6 },
-  nodeBreakdownRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
-  nodeBreakdownLeft:  { flexDirection: 'row', alignItems: 'center' },
-  nodeBreakdownDot:   { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  nodeBreakdownName:  { fontSize: 13, fontWeight: '600', color: '#374151' },
-  nodeBreakdownMeta:  { fontSize: 11, color: '#9CA3AF' },
-  nodeBreakdownNoData:{ fontSize: 11, color: '#D1D5DB', fontStyle: 'italic' },
+  nodeBreakdownCard:   { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 14, borderLeftWidth: 3, borderLeftColor: '#E5E7EB' },
+  nodeBreakdownTitle:  { fontSize: 12, fontWeight: '700', color: '#9CA3AF', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.6 },
+  nodeBreakdownRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  nodeBreakdownLeft:   { flexDirection: 'row', alignItems: 'center' },
+  nodeBreakdownDot:    { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  nodeBreakdownName:   { fontSize: 13, fontWeight: '600', color: '#374151' },
+  nodeBreakdownMeta:   { fontSize: 11, color: '#9CA3AF' },
+  nodeBreakdownNoData: { fontSize: 11, color: '#D1D5DB', fontStyle: 'italic' },
 
-  metricsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  metricCard: {
-    flex: 1, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
-    alignItems: 'center', borderTopWidth: 3,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
-  },
-  metricLabel: {
-    fontSize: 10, color: '#9CA3AF', fontWeight: '600', marginBottom: 6,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-  },
+  metricsRow:  { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  metricCard:  { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, alignItems: 'center', borderTopWidth: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  metricLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   metricValue: { fontSize: 22, fontWeight: '800' },
   metricUnit:  { fontSize: 11, color: '#9CA3AF', marginTop: 2, marginBottom: 6 },
   metricRange: { fontSize: 9, color: '#D1D5DB', fontWeight: '500', textAlign: 'center' },
 
-  statusBadge: {
-    padding: 16, borderRadius: 14, alignItems: 'center', marginBottom: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
-  },
+  statusBadge:   { padding: 16, borderRadius: 14, alignItems: 'center', marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
   statusLabel:   { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 3 },
   statusMessage: { fontSize: 13, color: '#FFFFFF', opacity: 0.9 },
 
-  chartCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
-  },
+  chartCard:   { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   chartTitle:  { fontSize: 15, fontWeight: '700', color: '#111827' },
   chartMeta:   { fontSize: 13, fontWeight: '600', color: '#9CA3AF' },
@@ -759,38 +737,51 @@ const styles = StyleSheet.create({
   barFill:        { width: '100%', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   barBottomLabel: { fontSize: 9, color: '#9CA3AF', marginTop: 5, textAlign: 'center' },
 
+  // ── Insight card ──
   insightCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
     borderLeftWidth: 4, borderLeftColor: '#FF5C4D',
   },
-  insightHeader:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 12 },
-  insightIconBox: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center',
-  },
+  insightHeader:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
+  insightIconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
   insightTitle:   { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 3 },
   insightMeta:    { fontSize: 11, color: '#9CA3AF' },
   insightDivider: { height: 1, backgroundColor: '#F3F4F6', marginBottom: 12 },
   insightBody:    { fontSize: 14, color: '#374151', lineHeight: 22 },
 
-  historyCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+  // ── Translate button ──
+  translateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 11, paddingVertical: 8,
+    borderRadius: 20, backgroundColor: '#F3F4F6',
+    borderWidth: 1.5, borderColor: '#E5E7EB',
+    minWidth: 80, justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
-  historyTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 14 },
-  historyRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F9FAFB',
-  },
-  historyRowActive: { backgroundColor: '#FEF2F2', marginHorizontal: -18, paddingHorizontal: 18, borderRadius: 10 },
-  historyRowLeft:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  historyDot:       { width: 10, height: 10, borderRadius: 5 },
-  historyDate:      { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 2 },
-  historyDateActive:{ color: '#FF5C4D' },
-  historyMeta:      { fontSize: 11, color: '#9CA3AF' },
+  translateBtnActive:     { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  translateBtnFlag:       { fontSize: 13 },
+  translateBtnText:       { fontSize: 12, fontWeight: '700', color: '#6B7280' },
+  translateBtnTextActive: { color: '#FF5C4D' },
+
+  // ── Language badge ──
+  langBadge:     { alignSelf: 'flex-start', backgroundColor: '#FEF2F2', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10 },
+  langBadgeText: { fontSize: 11, fontWeight: '600', color: '#FF5C4D' },
+
+  // ── Translation error ──
+  translateErrorRow:  { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  translateErrorText: { fontSize: 12, color: '#EF4444', flex: 1 },
+
+  historyCard:       { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  historyTitle:      { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 14 },
+  historyRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  historyRowActive:  { backgroundColor: '#FEF2F2', marginHorizontal: -18, paddingHorizontal: 18, borderRadius: 10 },
+  historyRowLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  historyDot:        { width: 10, height: 10, borderRadius: 5 },
+  historyDate:       { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 2 },
+  historyDateActive: { color: '#FF5C4D' },
+  historyMeta:       { fontSize: 11, color: '#9CA3AF' },
 
   refreshFooter:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, marginTop: 4 },
   refreshFooterText: { fontSize: 12, color: '#9CA3AF' },
@@ -798,57 +789,27 @@ const styles = StyleSheet.create({
 
 // ─── Calendar styles ──────────────────────────────────────────────────────────
 const cal = StyleSheet.create({
-  overlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 20,
-  },
-  title:    { fontSize: 18, fontWeight: '800', color: '#111827' },
-  closeBtn: { padding: 6, borderRadius: 10, backgroundColor: '#F3F4F6' },
-
-  monthNav: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
-  },
+  overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet:      { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  title:      { fontSize: 18, fontWeight: '800', color: '#111827' },
+  closeBtn:   { padding: 6, borderRadius: 10, backgroundColor: '#F3F4F6' },
+  monthNav:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   navBtn:     { padding: 8, borderRadius: 10, backgroundColor: '#F9FAFB' },
   monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827' },
-
   dayLabelsRow: { flexDirection: 'row', marginBottom: 8 },
-  dayLabel: {
-    flex: 1, textAlign: 'center',
-    fontSize: 12, fontWeight: '600', color: '#9CA3AF',
-  },
-
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: {
-    width: '14.28%', aspectRatio: 1,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 4,
-  },
-  cellSelected: { backgroundColor: '#FF5C4D', borderRadius: 12 },
-  cellToday:    { backgroundColor: '#FEF2F2', borderRadius: 12 },
+  dayLabel:   { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '600', color: '#9CA3AF' },
+  grid:       { flexDirection: 'row', flexWrap: 'wrap' },
+  cell:       { width: '14.28%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  cellSelected:     { backgroundColor: '#FF5C4D', borderRadius: 12 },
+  cellToday:        { backgroundColor: '#FEF2F2', borderRadius: 12 },
   cellText:         { fontSize: 14, fontWeight: '600', color: '#374151' },
   cellTextDisabled: { color: '#D1D5DB', fontWeight: '400' },
   cellTextSelected: { color: '#FFFFFF' },
   cellTextToday:    { color: '#FF5C4D' },
-  dot: {
-    position: 'absolute', bottom: 4,
-    width: 4, height: 4, borderRadius: 2,
-    backgroundColor: '#FF5C4D',
-  },
-
-  legend: {
-    flexDirection: 'row', gap: 16, marginTop: 16,
-    justifyContent: 'center',
-  },
-  legendItem:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot:   { width: 8, height: 8, borderRadius: 4 },
-  legendText:  { fontSize: 12, color: '#6B7280' },
+  dot:        { position: 'absolute', bottom: 4, width: 4, height: 4, borderRadius: 2, backgroundColor: '#FF5C4D' },
+  legend:     { flexDirection: 'row', gap: 16, marginTop: 16, justifyContent: 'center' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot:  { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 12, color: '#6B7280' },
 });

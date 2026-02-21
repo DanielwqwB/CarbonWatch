@@ -546,9 +546,6 @@ export default function Reports() {
             {/* Summary card */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Carbon Emission Summary</Text>
-              <Text style={styles.cardSubtitle}>
-                CO2 · {avgCO2Index} Avg CO₂ Index · {filtered.length} sensors · {periodLabel}
-              </Text>
               <View style={styles.summaryTopRow}>
                 <View style={styles.iconCircle}>
                   <MaterialCommunityIcons name="molecule-co2" size={28} color="#10B981" />
